@@ -23,6 +23,10 @@
                penutupan baru dan tiap detak jantung (5 menit). Hapus → regenerasi dari ledger.
 
    Tidak ada dependency: Node >= 22 sudah punya WebSocket dan fetch global.
+
+   24/7 tanpa laptop: .github/workflows/collector.yml menjalankan berkas ini di GitHub
+   Actions dan mengirim hasilnya lewat tools/publish.sh. Di sana window per run harus
+   panjang (PLAN_TTL 60 menit) — bukan beberapa menit tiap jam.
    ============================================================ */
 const fs=require('fs');
 const path=require('path');

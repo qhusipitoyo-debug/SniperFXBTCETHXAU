@@ -1,0 +1,99 @@
+name: collector 24/7
+
+# Bentuknya BUKAN "collector hidup 13 menit tiap 15 menit". Time-stop plan di engine ini
+# 60 menit (E.PARAMS.PLAN_TTL), jadi window pendek akan membuang hampir semua plan yang
+# belum sempat selesai — dan yang tersisa cuma plan yang beruntung kena SL/TP cepat.
+# Itu sampel yang berat sebelah, bukan sekadar sampel kecil. Jadi satu job hidup berjam-jam
+# dan cron di sini cuma dipakai untuk menyalakan job berikutnya saat yang lama keluar.
+#
+# Yang ditulis job ini: stats/live_ledger.jsonl + stats/live_stats.json (lihat README).
+# Token yang dipakai untuk push adalah GITHUB_TOKEN bawaan Actions — tidak ada token
+# pribadi yang perlu dibuat atau disimpan di mana pun. Tapi repo harus mengizinkan
+# workflow menulis: Settings → Actions → General → Workflow permissions →
+# "Read and write permissions". Tanpa itu langkah publish gagal 403.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'      # penunjuk jalan, bukan penanda perioda kumpul
+  workflow_dispatch:
+    inputs:
+      feed:
+        description: 'Sumber tick'
+        type: choice
+        default: 'deriv'
+        options: ['deriv', 'binance']
+      modes:
+        description: 'Mode engine, pisahkan dengan koma'
+        type: string
+        default: 'balanced'
+      hours:
+        description: 'Berapa jam job ini dibiarkan hidup (maks 5)'
+        type: string
+        default: '5'
+      segmen:
+        description: 'Panjang satu segmen dalam menit sebelum commit+push'
+        type: string
+        default: '30'
+
+# Satu collector saja: kalau ada dua instance menulis ledger yang sama, barisnya duplikat
+# dan angka winrate tidak bisa lagi dipercaya. Antrean cron tidak akan menumpuk — Actions
+# membuang jadwal yang terlewat selama grup ini masih sibuk.
+concurrency:
+  group: collector
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340        # di bawah batas keras Actions 6 jam, sisanya untuk publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'    # >= 22: WebSocket dan fetch sudah global, tidak ada npm install
+
+      - name: kumpulkan dan terbitkan per segmen
+        env:
+          FEED: ${{ inputs.feed || 'deriv' }}
+          MODES: ${{ inputs.modes || 'balanced' }}
+          HOURS: ${{ inputs.hours || '5' }}
+          SEGMIN: ${{ inputs.segmen || '30' }}
+        run: |
+          # Angka mentah dari input workflow_dispatch: paksa jadi bilangan, kalau bukan → default.
+          num() { case "$1" in ''|*[!0-9]*) echo "$2";; *) echo "$1";; esac; }
+          H=$(num "${HOURS:-5}" 5); if [ "$H" -gt 5 ]; then H=5; fi
+          SEG=$(num "${SEGMIN:-30}" 30); if [ "$SEG" -lt 5 ]; then SEG=5; fi
+          END=$(( $(date +%s) + H * 3600 ))
+          n=0
+          while [ "$(date +%s)" -lt "$END" ]; do
+            n=$((n + 1))
+            echo "::group::segmen $n — collector $(date -u +'%H:%M') +${SEG}m"
+            # SIGTERM ditangani collector sebagai "flush lalu keluar 0". --preserve-status
+            # wajib: tanpa itu `timeout` selalu mengembalikan 124 untuk segmen yang berakhir
+            # sesuai rencana, dan setiap segmen akan terbaca seperti kegagalan.
+            timeout -s TERM --preserve-status "$((SEG * 60))" node tools/collector.js --feed="$FEED" --modes="$MODES" ||
+              echo "collector segmen $n berhenti dengan code $? — publish tetap dijalankan"
+            echo "::endgroup::"
+            PUBLISH_SEGMENT=$n bash tools/publish.sh || echo "publish segmen $n gagal — coba lagi di segmen berikutnya"
+          done
+
+      - name: ringkasan
+        if: always()
+        run: |
+          echo "### Isi ledger setelah job ini" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f stats/live_ledger.jsonl ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            node -e "const fs=require('fs');const rows=fs.readFileSync('stats/live_ledger.jsonl','utf8').split('\n').filter(Boolean).map(JSON.parse);const by={};for(const r of rows)by[r.pair+'/'+r.mode]=(by[r.pair+'/'+r.mode]||0)+1;console.log(rows.length+' plan','|',Object.entries(by).map(([k,v])=>k+':'+v).join(' '))" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Belum ada satu plan pun yang selesai — ledger tidak dibuat.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f stats/live_stats.json ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            node -e "const s=require('./stats/live_stats.json');const c=s.counters;console.log('tick',c.ticks,'| reconnect',c.reconnects,'| error',c.errors,'| umur tick terakhir',c.lastTickAgeS,'dtk')" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi

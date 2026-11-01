@@ -343,6 +343,56 @@ Ringkasan yang umurnya lewat 10 menit tidak lagi disebut "aktif" — panel menul
 berkas itu ditulis dan bilang angkanya tidak akan bertambah. Ini penting karena Pages menyajikan
 berkas apa adanya: ledger kemarin sore akan tampil rapi seolah-olah live.
 
+## 24/7 tanpa laptop: GitHub Actions (`collector.yml`)
+
+Pages hanya menyajikan berkas, jadi collector harus jalan di suatu tempat. Workflow
+`.github/workflows/collector.yml` menjalankan collector **di Actions itu sendiri** dan
+menulis hasilnya kembali ke branch dengan `GITHUB_TOKEN` bawaan — tidak ada token pribadi
+yang perlu dibuat, disimpan, atau ditempel di mana pun. Repo ini publik, jadi menit Actions
+tidak dipungut biaya.
+
+Bentuknya penting: **satu job hidup berjam-jam, dipecah jadi segmen 30 menit**, bukan
+"collector 13 menit tiap 15 menit". `PLAN_TTL` engine ini 60 menit, jadi window pendek akan
+membuang hampir semua plan yang belum selesai dan menyisakan hanya plan yang kena SL/TP cepat
+— itu bukan sampel kecil, itu sampel yang berat sebelah, dan winrate yang dihitung darinya
+menyesatkan. Cron `*/15` di workflow itu hanyalah penunjuk jalan: `concurrency.group: collector`
+memastikan hanya ada satu instance, dan begitu yang lama keluar, jadwal berikutnya langsung masuk.
+
+Perjalanan tiap segmen: `timeout -s TERM --preserve-status` → collector flush lalu keluar 0
+→ `tools/publish.sh` commit + push `stats/live_ledger.jsonl` dan `stats/live_stats.json`.
+`--preserve-status` wajib: tanpa itu `timeout` selalu mengembalikan 124 untuk segmen yang
+berakhir sesuai rencana dan setiap segmen terbaca seperti kegagalan.
+
+Dua hal yang harus disentuh sekali di GitHub (tidak bisa dari repo):
+
+1. **Settings → Actions → General → Workflow permissions → "Read and write permissions"**.
+   Default banyak repo adalah read-only, dan publish akan gagal `403` dengan pesan yang tidak
+   jelas. Ini penyebab paling mungkin kalau workflow-nya hijau tapi halaman tidak pernah berubah.
+2. Jalankan sekali lewat **Actions → collector 24/7 → Run workflow** dengan `hours: 1` sebelum
+   percaya pada jadwal. Lihat log-nya: kalau `counters.ticks` masih 0 setelah satu segmen,
+   feed Deriv tidak mau diajak bicara dari IP datacenter — jalankan ulang dengan `feed: binance`
+   dan `pairs: BTCUSD,ETHUSD` (jalur itu teruji di mesin ini: 1781 tick dalam 25 detik).
+
+Yang jujur soal batasnya:
+
+- GitHub tidak menjanjikan ketepatan cron; saat antrian padat, jadwal bisa molor beberapa menit,
+  dan **schedule otomatis dimatikan di repo yang 60 hari tidak ada perubahan**. Workflow ini
+  menulis commit tiap 30 menit, jadi selama ia hidup repo-nya tetap "aktif" — tapi kalau ia
+  dimatikan manual, tidak ada yang menyalakannya kembali.
+- Batas keras Actions adalah 6 jam per job (`timeout-minutes: 340` di sini, berhenti sendiri
+  di 5 jam supaya sisa waktunya cukup untuk publish). Ini bukan hosting; kalau GitHub suatu hari
+  membatasi job panjang, jalan keluarnya tetap sama tetapi di mesin lain (VPS/Raspberry Pi,
+  `systemd` + `tools/publish.sh` — skrip publish-nya tidak peduli siapa yang memanggilnya).
+- Push bisa gagal 3 kali percobaan (branch bergerak, konflik). Yang hilang cuma satu segmen;
+  ledger tetap append-only dan segmen berikutnya mencoba lagi.
+
+Cara melihatnya dari luar:
+
+```bash
+git ls-remote origin main                                   # commit "stats: collector ..." harus terus baru
+curl -s https://qhusipitoyo-debug.github.io/SniperFXBTCETHXAU/stats/live_stats.json | head -c 200
+```
+
 ## Publikasi: GitHub Pages, tanpa Jekyll
 
 Panel ini sudah statis murni — satu `index.html`, `app.js`, `engine.js`, `styles.css`, dan satu berkas
@@ -364,8 +414,8 @@ Yang perlu diketahui supaya versi online berperilaku sama dengan versi localhost
 4. **`bridge/`, `mt5/`, dan alat uji MT5 tidak ikut ke repo** (lihat `.gitignore`). Yang tayang hanya
    jalur analisis; `README.md` di bawah ini masih memuat bagian auto-order sebagai catatan historis.
 5. **Yang tayang adalah berkas hasil, bukan prosesnya.** GitHub Pages menjalankan apa pun di browser
-   tetapi tidak menjalankan Node, jadi daemon 24/7 harus hidup di mesin lain (laptop yang tidak
-   ditutup, VPS ±Rp 60rb/bulan, atau Actions cron yang menyalakan collector beberapa menit tiap jam).
+   tetapi tidak menjalankan Node, jadi daemon 24/7 harus hidup di mesin lain — lihat bagian
+   *24/7 tanpa laptop* di atas untuk opsi Actions, atau jalankan `collector.js` di laptop/VPS sendiri.
    Output-nya kemudian di-commit seperti `pair_stats.json` — `stats/live_ledger.jsonl` dan
    `stats/live_stats.json` sengaja **tidak** di-ignore karena itulah yang membuat CATATAN LIVE dan
    winrate per jam bertambah walau tidak ada tab yang terbuka. Halaman yang di-host akan selalu
