@@ -1,0 +1,25 @@
+# Data tick mentah (7,5–61 MB per pair) diunduh sendiri, tidak ikut ke repo:
+#   node tools/fetch_klines.js BTCUSDT ETHUSDT EURUSDT PAXGUSDT --days=30
+# Hasil replay justru KEBALIKNYA: stats/pair_stats.json (±22 KB) ikut di-commit karena
+# panel di GitHub Pages membacanya lewat fetch dan tidak bisa menjalankan Node.
+data/
+
+# Koridor MT5/bridge masih ada di disk sebagai rujukan, tetapi sengaja tidak di-publish:
+# panel ini analisis lokal, tidak ada jalur order, dan repo-nya publik.
+bridge/
+mt5/
+tools/bridge_test.js
+tools/bridge_http_test.js
+tools/scanner_test.js
+tools/ea_sim.js
+tools/order_test.js
+tools/tp1_rig.js
+tools/compile_ea.sh
+
+# Bukan bagian proyek: skrip installer Qoder CLI yang nyasar ke folder ini
+install.cmd
+
+# Artefak lama / direktori alat lokal
+fx-sniper.zip
+.qoder/
+*.log

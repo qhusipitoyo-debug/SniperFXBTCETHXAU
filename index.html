@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FX + Gold + Crypto Sniper — Multi Scanner</title>
+<link rel="stylesheet" href="styles.css?v=15">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner majors + XAU/BTC/ETH • analisis lokal, tanpa koneksi broker</p></div></div>
+  <div class="topActions">
+    <div class="connection"><i id="binanceDot"></i><span id="feedLabel">FEED</span></div>
+    <select id="feedSelect">
+      <option value="deriv">DERIV (10 pair)</option>
+      <option value="binance">BINANCE (EUR/GBP/AUD + XAU/BTC/ETH)</option>
+      <option value="oanda">OANDA</option>
+      <option value="capital">CAPITAL.COM</option>
+    </select>
+    <select id="modeSelect">
+      <option value="balanced">BALANCED</option>
+      <option value="precision">PRECISION</option>
+      <option value="momentum">MOMENTUM</option>
+      <option value="liquidity">LIQUIDITY</option>
+      <option value="auto">AUTO EDGE</option>
+      <option value="edge">MAX EDGE</option>
+    </select>
+    <select id="scanFilter">
+      <option value="action">Hanya ENTRY + SETUP</option>
+      <option value="threshold">Lolos skor threshold</option>
+      <option value="all">Semua pair scan</option>
+    </select>
+    <button id="refresh">↻ REFRESH</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero panel">
+    <div class="heroMain">
+      <div>
+        <label>MULTI SCANNER</label>
+        <h2 id="marketTitle">Memindai majors, emas & crypto…</h2>
+        <div class="heroSub">
+          <span>LIVE <b id="scanLiveCount">0</b></span>
+          <span>ALERT <b id="scanAlertCount">0</b></span>
+          <span>MODE <b id="scanModeLabel">BALANCED</b></span>
+          <span>TF <b id="tfLabel">15m</b></span>
+        </div>
+      </div>
+      <div class="countdown"><small>FEED AGE</small><strong id="binanceFeed">—</strong><em>LAST TICK</em></div>
+    </div>
+    <div class="heroFooter"><span id="status">Connecting live feeds…</span></div>
+  </section>
+
+  <section class="panel alertPanel">
+    <div class="panelHead">
+      <h2>🎯 PLAN SIAP (lolos threshold)</h2>
+      <span id="alertHint">ENTRY terkunci / SETUP countdown</span>
+    </div>
+    <div id="alertBoard" class="alertBoard"><div class="historyEmpty">Belum ada pair yang lolos threshold. Scanner tetap jalan di belakang.</div></div>
+  </section>
+
+  <section class="panel scanPanel">
+    <div class="panelHead">
+      <h2>📡 SCANNER BOARD</h2>
+      <span>Klik pair untuk fokus chart &amp; plan</span>
+    </div>
+    <div id="scanBoard" class="scanBoard"></div>
+  </section>
+
+  <section class="panel planPanel">
+    <div class="panelHead">
+      <h2>📲 FOKUS · <span id="focusPairName">EURUSD</span></h2>
+      <button id="planCopy">COPY PLAN</button>
+    </div>
+    <div class="planTop">
+      <div><small>AKSI</small><strong id="planAction">WAIT</strong></div>
+      <div class="planStatus" id="planStatus">Pilih pair di scanner atau tunggu alert.</div>
+    </div>
+    <div class="planGrid">
+      <div><span>ENTRY (MARKET)</span><b id="planEntry">—</b></div>
+      <div><span>STOP LOSS</span><b id="planSL">—</b></div>
+      <div><span>TAKE PROFIT 1</span><b id="planTP1">—</b></div>
+      <div><span>TAKE PROFIT 2</span><b id="planTP2">—</b></div>
+      <div><span>LOT</span><b id="planLot">—</b></div>
+      <div><span>RISIKO</span><b id="planRiskUsd">—</b></div>
+      <div><span>REWARD</span><b id="planRR">—</b></div>
+      <div><span>ATR / SL / SPREAD</span><b id="planAtr">—</b></div>
+    </div>
+    <div class="planInputs">
+      <div><label>SALDO ($)</label><input id="planBalance" type="number" inputmode="decimal" min="0" step="any"></div>
+      <div><label>RISIKO / TRADE (%)</label><input id="planRisk" type="number" inputmode="decimal" min="0" step="any"></div>
+    </div>
+    <div class="planSteps" id="planSteps">—</div>
+  </section>
+
+  <section class="panel pairStatsPanel">
+    <div class="panelHead">
+      <h2>🏆 STATISTIK PER PASANGAN — rencana yang lolos scanner</h2>
+      <span id="pairStatsMode">mode BALANCED</span>
+    </div>
+    <div class="pairStatsSrc" id="pairStatsSrc">Menghitung…</div>
+    <div id="pairStatsBoard" class="pairStatsBoard"><div class="historyEmpty">Belum ada hasil uji.</div></div>
+    <div class="pairStatsVerdict" id="pairStatsVerdict"></div>
+    <div class="panelHead sub"><h2>WINRATE PER JAM UTC — jam berapa scanner ini layak dipakai</h2><span>Replay semua pair yang punya data + ledger tab ini, mengikuti mode yang dipilih</span></div>
+    <div id="hourBoard" class="hourBoard"><div class="historyEmpty">Belum ada pecahan per jam.</div></div>
+    <div class="hourNote" id="hourNote"></div>
+    <div class="panelHead sub"><h2>CATATAN LIVE — plan yang benar-benar terkunci di tab ini</h2><span>Dinilai engine yang sama, tick live dari feed; angka ini bertambah terus</span></div>
+    <div id="livePairBoard" class="pairStatsBoard"><div class="historyEmpty">Belum ada plan yang terkunci dan selesai di tab ini.</div></div>
+  </section>
+
+  <section class="panel marketChart">
+    <div class="panelHead">
+      <h2>💱 <span id="chartTitle">EUR / USD</span> <em class="liveBadge">LIVE</em></h2>
+      <div class="spotPair"><span id="binanceBid">—</span><span>/</span><span id="binanceAsk">—</span></div>
+    </div>
+    <div class="priceHero">
+      <div><label>SPOT</label><strong id="spotPrice">—</strong></div>
+      <div class="last"><label>MID</label><b id="lastPrice">—</b></div>
+      <div class="signalPill" id="spotSignal">WAIT</div>
+    </div>
+    <canvas id="btcChart" height="150"></canvas>
+    <div class="chartMeta">
+      <span><b id="lbl1b">1 bar</b> <b id="ret1s">—</b></span>
+      <span><b id="lbl3b">3 bar</b> <b id="ret3s">—</b></span>
+      <span><b id="lbl15b">15 bar</b> <b id="ret5s">—</b></span>
+      <span>FEED <b id="chartFeed">—</b></span>
+    </div>
+  </section>
+
+  <section class="panel sniperPanel">
+    <div class="panelHead"><h2>⚡ FOKUS ENGINE</h2><select id="pairSelect">
+      <option value="EURUSD">EUR/USD</option>
+      <option value="USDJPY">USD/JPY</option>
+      <option value="GBPUSD">GBP/USD</option>
+      <option value="USDCHF">USD/CHF</option>
+      <option value="AUDUSD">AUD/USD</option>
+      <option value="USDCAD">USD/CAD</option>
+      <option value="NZDUSD">NZD/USD</option>
+      <option value="XAUUSD">XAU/USD (Emas)</option>
+      <option value="BTCUSD">BTC/USD</option>
+      <option value="ETHUSD">ETH/USD</option>
+    </select></div>
+    <div id="sniperBox" class="sniper">
+      <div><small>STAGE</small><strong id="sniperText">WAIT</strong></div>
+      <div class="sniperReason"><span id="sniperSub">Waiting…</span></div>
+    </div>
+    <div class="factorRow" style="margin-top:10px">
+      <div><span>MOM</span><b id="factorMomentum">—</b></div>
+      <div><span>HTF / FLOW</span><b id="factorFlow">—</b></div>
+      <div><span>TREND</span><b id="factorPoly">—</b></div>
+      <div><span>BRK · ER</span><b id="factorRsi">—</b></div>
+    </div>
+    <div class="diagGrid" style="margin-top:8px">
+      <div><span>SCORE</span><b id="modelScore">—</b></div>
+      <div><span>ATR 1M</span><b id="volatility">—</b></div>
+      <div><span>ATR÷BIAYA</span><b id="bidEdge">—</b></div>
+      <div><span>ALIGN</span><b id="alignment">—</b></div>
+    </div>
+  </section>
+
+  <section class="panel statsPanel">
+    <div class="panelHead"><h2>📈 PERFORMANCE (R)</h2><button id="statsToggle">SHOW STATS</button></div>
+    <div id="statsDetails" class="statsDetails hiddenStats">
+      <div class="statsGrid">
+        <div class="statCard"><span>WIN</span><b id="sniperWins">0</b></div>
+        <div class="statCard"><span>LOSS</span><b id="sniperLosses">0</b></div>
+        <div class="statCard"><span>WIN RATE</span><b id="sniperWinRate">—</b></div>
+        <div class="statCard"><span>AVG R</span><b id="probAccuracy">—</b></div>
+        <div class="statCard"><span>TOTAL R</span><b id="upProbAccuracy">—</b></div>
+        <div class="statCard"><span>PF / DD</span><b id="downProbAccuracy">—</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel history">
+    <div class="panelHead"><h2>🕘 ENTRY TERKUNCI</h2></div>
+    <div id="entryHistory" class="historyList"><div class="historyEmpty">Belum ada entry.</div></div>
+  </section>
+
+  <section class="panel resultsPanel">
+    <div class="panelHead"><h2>NOTES</h2></div>
+    <div id="recentResults" class="recentResults"><span class="historyEmpty">Loading…</span></div>
+  </section>
+</main>
+
+<footer>
+  <span>MULTI SCANNER v8 • scanner informational • semua dihitung lokal di halaman ini, tidak ada order dan tidak ada koneksi broker</span>
+  <span><button id="exportTicks">Export ticks</button> <button id="clear">Clear history</button></span>
+</footer>
+
+<script src="engine.js?v=11"></script>
+<script src="app.js?v=18"></script>
+</body>
+</html>

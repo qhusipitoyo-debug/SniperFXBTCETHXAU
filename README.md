@@ -1,6 +1,6 @@
 # FX Majors Sniper
 
-Dikonversi dari XAUUSD Sniper. Scanner-nya informational only — tidak ada order yang jalan sendiri. Auto-order MT5 ada mulai v8, tapi mati secara default, DRY RUN secara default, dan hanya mau jalan di akun demo (lihat [Auto-order MT5](#auto-order-mt5-demo-saja--v8)).
+Dikonversi dari XAUUSD Sniper. Semua berjalan lokal di browser — scanner informational only, tidak ada order, tidak ada koneksi ke terminal broker apa pun. mulai v8, tapi mati secara default, DRY RUN secara default, dan hanya mau jalan di akun demo (lihat [Auto-order MT5](#auto-order-mt5-demo-saja--v8)).
 
 ## Pair (dropdown kiri atas, atau `?pair=EURUSD`)
 
@@ -19,24 +19,29 @@ Untuk USD/JPY, USD/CHF, USD/CAD, NZD/USD pakai **Deriv** (paling mudah, tanpa da
 
 ## Jalankan
 
+Panel adalah berkas statis — satu server kecil di folder ini sudah cukup:
+
 ```bash
-# 1) web app
 python3 -m http.server 8080          # buka http://localhost:8080
-
-# 2) proxy (hanya untuk OANDA / Capital.com), Node 20.6+
-cd proxy
-npm install
-cp .env.example .env                 # isi token / API key
-npm start
 ```
+
+Jangan jalankan dua kali: port 8080 biasanya sudah dipegang autostart, dan python akan keluar dengan
+`OSError: [Errno 98] Address already in use`. Cek dengan `bash tools/autostart.sh --status`; kalau panel
+sudah jalan, buka saja `http://127.0.0.1:8080` (pakai angka, bukan nama `localhost`, kalau browsermu
+lewat proxy/VPN — proxy sering ikut menyeret `localhost` lalu menolak koneksi).
 
 ```bash
-# 3) satu perintah untuk seluruh rangkaian lokal — MT5 (Bottles) + bridge/scanner otonom + panel
-bash tools/autostart.sh              # juga yang dipanggil autostart login; --status untuk melihat saja
+bash tools/autostart.sh              # nyalakan panel setelah login; --status untuk melihat saja
 ```
 
-Langkah 2 hanya untuk feed OANDA/Capital; jalur demo FBS lewat MT5 + bridge tidak memakai `proxy/`
-(lihat **Auto-order MT5**).
+Statistik per pair (panel "🏆 STATISTIK PER PASANGAN") dibaca dari `stats/pair_stats.json`. Berkas itu
+tidak ikut terkirim — buat sekali:
+
+```bash
+node tools/pair_stats.js             # ±15 menit: replay engine atas data lokal, semua pair × semua mode
+```
+
+Langkah proxy hanya untuk feed OANDA / Capital.com.
 
 Satu koneksi broker melayani ketujuh pair; browser memfilter sesuai pair terpilih, jadi ganti pair instan.
 Token broker hanya ada di `.env`, tidak masuk browser. Proxy listen di `127.0.0.1` dan hanya menerima origin di `ALLOW_ORIGINS`.
@@ -182,6 +187,28 @@ Status setelah lanjutan ini: `dryRun=true`, `autoArm=false`, tidak ada order liv
 
 **Repo ketiga yang dievaluasi dan ditolak utuh: [TheUnknown550/AI-Trading-System](https://github.com/TheUnknown550/AI-Trading-System)** (MIT, 175 MB, 44 model RandomForest ter-commit, commit terakhir Okt 2025). Ditolak bukan karena selera: targetnya sendiri jujur (`train_models.py:49-50` = 1 bila close besok > close hari ini), tapi `train_models.py:93-95` memakai `train_test_split(X, y, test_size=0.2, random_state=42)` — shuffle default pada deret waktu, tanpa `TimeSeriesSplit`, tanpa purge/embargo — sementara `train_models.py:68` hanya membuang `Close`, sehingga `Open/High/Low` dan pita SMA/EMA/BB **dalam satuan harga mutlak** tetap jadi fitur. Baris test ke-t lalu duduk di sebelah baris train t±1 dengan level harga nyaris identik: pohonnya menghafal hari, bukan membaca pola. Itu cukup menjelaskan "akurasi" 67–78% yang diklaim di docs, padahal base-rate majority class CSV yang mereka commit sendiri 50,5–54,2%. Dua temuan lain membuat isinya tidak bisa dipakai bahkan sebagai inspirasi: kolom `news_*` **konstan di semua baris** (snapshot RSS hari eksekusi disiar-siarkan ke 1 270 baris historis; kolom terakhir `EURUSDX_enhanced_features.csv` = 0 di seluruh file, dan Volume Yahoo untuk FX memang 0 sehingga OBV juga konstan), dan `src/testing/backtester.py:94-112` — bagian yang menghasilkan angka profit — **tidak pernah memuat modelnya**: `simulate_prediction` menulis "For backtesting, we'll use a simple strategy / In reality, you'd use your trained model here" lalu menebak dengan aturan RSI<30/>70 + confidence 0,7, dieksekusi di close bar yang sama, tanpa fee/slippage/spread, long-only. Bukti hasil: tidak ada (tidak ada trade log, equity curve, atau `outputs/paper_portfolio.json`; satu-satunya "angka" adalah `+$12,58 di atas $10.000` di README). Nilai gunanya bagi kita justru sebagai kontrol negatif: tiga kesalahan repo itu (split acak pada data waktu, fitur non-stasioner, isi-signal-di-close-yang-sama) adalah persis tiga hal yang sudah dibersihkan `tools/walkforward.js` (expanding window, fold bergerak, dinilai dari fold terburuk), `costPips()`/`--cost-extra` (spread data + biaya eksplisit), dan `tools/signal_test.js` (detrend global, blok bootstrap). Tidak ada yang diadopsi, dan itu ditulis supaya tidak dievaluasi ulang enam bulan dari sekarang.
 
+**1-11-2026 — scanner jalan juga waktu terminal mati.** `MT5` beberapa kali ditemukan sudah tidak menulis
+`sniper_status.txt` (status basi 960 dtk, lalu 14 375 dtk), dan setiap kali itu scanner ikut diam: tidak ada
+sinyal, tidak ada rencana, dan tidak ada cara membedakan "tidak ada peluang" dari "tidak ada harga".
+`bridge/feed.js` menutup lubang itu dengan harga publik Binance (bookTicker 1 dtk + klines 1m untuk warm-up),
+dan batasnya dibuat tegas: sumber cadangan **tidak pernah** memanggil `submit()` — rencananya dicatat sebagai
+`counts.paper` lalu dibuang, `sniper_req.txt` tidak dibuat, `state.orders` tetap kosong, bahkan dengan
+`autoArm=true`. Jendela ARM tetap butuh terminal karena `expertRank`/`guardDecide` memang membaca
+`sniper_status.txt`, jadi ada dua lapis penolakan, bukan satu. Perilaku panel ikut diubah supaya tidak bohong:
+baris scanner sekarang menyebut `harga segar (EA)` atau `harga BINANCE (EA offline • sinyal paper, order
+terkunci)`, dan sumber dihitung saat itu juga, bukan dari tick terakhir. Dua detail yang membuat feed ini
+bukan sekadar "harga lain": satuan poinnya 10^−digits broker (bukan `pip/100` — BTC kebetulan sama, EURUSD/XAUUSD
+melenceng 10× dan seluruh audit biaya ikut salah), dan spread yang dilaporkan adalah `typSpread` broker di
+sekitar mid Binance (konvensi `tools/fetch_klines.js`), bukan spread Binance yang akan membuat R4/`minCost`
+optimistis palsu. Jujur tentang proksinya: yang layak adalah BTC/ETH; EURUSDT hari ini menyimpang ~1,3 % dari
+FBS dan nyaris tidak bergerak, PAXGUSDT ~7× lebih tenang dari XAUUSD terminal — jadi untuk dua pair itu
+feed cadangan cuma membuktikan "mesin masih hidup", bukan mengukur biaya. Tidak ada yang di-arm, `dryRun`
+tetap `true`, `autoArm` tetap `false`. Regresi: `bridge_test` 91, `scanner_test` 70 (19 baru: §J satuan feed,
+§K sinyal-without-terminal + dua kontrol), `bridge_http_test` 37 (3 baru: `priceSource` di `/status`),
+`ui_smoke` 0 error, `ea_sim` 11 langkah. Live: bridge 8790 di-restart dengan feed menempel —
+`priceSource=mt5` (terminal hidup) dan `feed.ready=true` di latar; uji terminal-mati dilakukan di folder
+kosong (`/tmp/sniper-nomt5`) dan scanner tetap memindai BTCUSD/ETHUSD sampai stage WATCH.
+
 
 
 45 hari bar 1 menit Binance (EURUSDT, PAXGUSDT/BTCUSDT/ETHUSDT), split 60/40, dua kali pencarian penuh:
@@ -195,7 +222,106 @@ Status setelah lanjutan ini: `dryRun=true`, `autoArm=false`, tidak ada order liv
 Angka di atas adalah bukti *tidak* ada edge pada pasangan parameter ini, bukan bahan optimasi lebih lanjut. Kalau spread brokermu jauh lebih kecil dari `typSpread` (0.0–0.2 pip ECN), kalibrasi ulang — biaya adalah variabel yang paling menentukan di sini.
 
 
-## Auto-order MT5 (DEMO saja) — v8
+## Statistik per pasangan — winrate scanner, tanpa MT5
+
+Panel "🏆 STATISTIK PER PASANGAN" menjawab satu pertanyaan: **dari rencana yang lolos scanner,
+winrate tiap pair bagus atau jelek?** Angkanya dihitung oleh mesin yang sama dengan yang dipakai
+live (`engine.js`), jadi tidak ada cabang kode evaluasi terpisah yang bisa berbeda pendapat.
+
+Ada dua angka, dan keduanya sengaja dipisah:
+
+| Tabel | Sumber | Arti |
+|---|---|---|
+| **REPLAY DATA UJI** | `node tools/pair_stats.js` → `stats/pair_stats.json` | engine dijalankan di atas tick historis lokal (`data/*_1m.csv`), semua pair × semua mode. Jendela tiap pair sepanjang datanya ada (45–365 hari, tertulis di baris sumber panel). Ini yang dipakai untuk menilai kualitas model. |
+| **WINRATE PER JAM UTC** | kolom `hours` di berkas yang sama + ledger tab ini | 24 sel, dipecah dari **jam masuk sinyal** (bukan jam keluar), dijumlahkan lintas pair pada mode yang sedang dipilih. Menjawab "jam berapa scanner ini layak dipakai". |
+| **CATATAN LIVE** | `localStorage` tab ini (`fxSniper2`) | plan yang benar-benar terkunci lalu selesai selama tab terbuka. Mulai dari nol, bertambah lambat — jangan dinilai sebelum samplesnya cukup. |
+
+Vonis dihitung dari ambang yang sejak awal dipakai proyek ini (`backtest.js`, `walkforward.js`):
+
+- **BAGUS** — ≥30 trade **dan** `avgR > 0` **dan** profit factor ≥ 1,1
+- **MARGINAL** — `avgR > 0` tapi PF di bawah 1,1
+- **JELEK** — `avgR ≤ 0` dan PF < 1
+- **SAMPEL n/30** atau **TANPA DATA** — belum bisa dinilai. Pair yang belum diuji tetap tampil di
+  tabel dengan alasannya; daftar yang diam-diam menyusut lebih menyesatkan daripada daftar kosong.
+
+Per jam pakai ambang sendiri, **≥20 trade** (`HOUR_MIN` di `app.js`), karena satu jam cuma
+menampung ±1/24 sampel — syarat 30 trade per pair tidak akan pernah tercapai dan seluruh tabel
+akan berbunyi "tipis". Yang dinilai per jam hanya `avgR` dan PF; **maxDD tidak dihitung** — drawdown
+maksimum atas pecahan 1/24 data bukan ukuran yang berarti. Jam dengan `n < 20` berlabel *tipis* dan
+sengaja tidak diberi vonis, jam tanpa trade ditulis `0 trade` supaya tidak terbaca sebagai 0%.
+
+Berkas JSON menyimpan jam sebagai `{n, w, g, l}` (jumlah, menang, R untung kotor, R rugi kotor);
+`avgR=(g-l)/n` dan `PF=g/l` diturunkan di browser. Ambang vonis karena itu bisa diubah tanpa
+mengulang replay 20 menit.
+
+Cara membuat datanya (sekali, ±20 menit untuk semua mode; satu mode ±3 menit):
+
+```bash
+node tools/pair_stats.js                       # semua pair × semua mode → stats/pair_stats.json
+node tools/pair_stats.js --modes balanced       # cepat, satu mode saja
+node tools/pair_stats.js --evalms 500           # evaluasi lebih sering (lebih lama, lebih halus)
+```
+
+Yang diuji hanyalah pair yang punya berkas tick lokal: **EUR/USD, XAU/USD (PAXG), BTC/USD, ETH/USD** —
+empat dari sepuluh. Sisanya (USD/JPY, GBP/USD, USD/CHF, AUD/USD, USD/CAD, NZD/USD) tidak punya sumber
+data publik di mesin ini, jadi kolomnya berbunyi "tidak ada sumber data lokal", **bukan** "0 trade".
+Binance tidak lagi menyediakan feed FX untuk pair-pair itu; satu-satunya jalan adalah merekam tick dari
+tombol **Export ticks** di panel, lalu menaruhnya sebagai `data/<SYMBOL>_1m.csv`.
+
+Hasil replay terkini pada mode `balanced` (angka nyata, bukan ilustrasi — spread retail sudah dihitung,
+slippage dan komisi belum):
+
+| Pair | Jendela | n | Winrate | avgR | Total R | PF | Vonis |
+|---|---|---|---|---|---|---|---|
+| XAU/USD | 365 hari | 124 | 46,8% | +0,026 | +3,28 | 1,18 | BAGUS (tipis) |
+| BTC/USD | 365 hari | 393 | 41,5% | −0,033 | −13,16 | 0,79 | JELEK |
+| ETH/USD | 45 hari | 39 | 41,0% | −0,011 | −0,42 | 0,91 | JELEK |
+| EUR/USD | 45 hari | 1 | 0% | −0,042 | −0,04 | 0,00 | SAMPEL 1/30 |
+
+Mode lain tidak lebih baik: satu-satunya sel dengan PF > 1 selain `balanced`/`liquidity` di XAU/USD
+adalah `auto` (n=19, PF 2,01) dan `edge` (n=5) — dua-duanya di bawah ambang sampel.
+
+Yang penting dari tabel di atas bukan labelnya, tapi komposisinya: mayoritas penutupan adalah `TIME`
+(time-stop 60 menit habis), bukan SL atau TP2 — 114/124 di emas, 356/393 di BTC. Artinya plan yang
+terkunci biasanya **tidak bergerak ke mana-mana** — sinyal dapat arah tapi tidak dapat momentum, dan
+"winrate" yang ada sebagian besar adalah "kena time-stop dalam posisi untung kecil". Untuk EUR/USD
+cuma satu plan dalam 45 hari, sehingga semua angka "winrate" pair itu selama ini adalah satu kejadian.
+
+## Publikasi: GitHub Pages, tanpa Jekyll
+
+Panel ini sudah statis murni — satu `index.html`, `app.js`, `engine.js`, `styles.css`, dan satu berkas
+data. Tidak ada langkah build, jadi **Jekyll tidak diperlukan dan justru sebaiknya dimatikan**
+(Pages → *Deploy from a branch* → `main` / `root`). Jekyll akan menjalankan Liquid di atas HTML,
+melewati berkas berawalan `_`, dan menambah 30–60 detik build tanpa manfaat.
+
+Yang perlu diketahui supaya versi online berperilaku sama dengan versi localhost:
+
+1. **`stats/pair_stats.json` ikut di-commit** (±22 KB), berbeda dari `data/` yang di-ignore. Alasannya:
+   panel membaca berkas itu lewat `fetch`, dan browser di GitHub Pages tidak bisa menjalankan
+   `tools/pair_stats.js`. Berkas ini satu-satunya "build artifact" yang sengaja versioned — kalau
+   datanya basi, regenerate lalu commit ulang.
+2. **Feed live jalan dari https** karena semuanya `wss://` (`api.derivws.com`, `stream.binance.com`,
+   `data-stream.binance.vision`) dan REST-nya `https://`. Hanya `?proxy=ws://127.0.0.1:8787` yang mati
+   di Pages — itu jalur proxy lokal opsional, bukan default.
+3. **Semua path relatif**, jadi repo yang tayang di `https://<user>.github.io/<repo>/` tidak perlu
+   konfigurasi apa pun. Jangan menambah `baseurl`/Jekyll config.
+4. **`bridge/`, `mt5/`, dan alat uji MT5 tidak ikut ke repo** (lihat `.gitignore`). Yang tayang hanya
+   jalur analisis; `README.md` di bawah ini masih memuat bagian auto-order sebagai catatan historis.
+
+```bash
+node tools/pair_stats.js && git add stats/pair_stats.json && git commit -m "stats: replay terbaru"
+git push                                                    # Pages: Settings → Pages → Deploy from branch
+```
+
+## Auto-order MT5 (DEMO saja) — v8 — **DIHAPUS**
+
+> **Koridor ini sudah tidak ada.** MT5 auto-order tidak bisa jalan di mesin ini (terminal tidak
+> menulis status EA, dan guard memblokir order), jadi seluruh komponennya dilepas dari panel:
+> section AUTO-ORDER, tombol ARM, bridge/`/status`, pembacaan `sniper_status.txt` dan
+> `sniper_trades.txt`, serta kolom offset harga terminal. Panel sekarang murni analisis lokal.
+> Kode `bridge/` dan `mt5/SniperBridge.mq5` masih ada di repo sebagai rujukan, tetapi **tidak**
+> lagi dijalankan `tools/autostart.sh` dan tidak ada satu pun baris `app.js` yang menyentuhnya.
+> Dokumentasi di bawah ini dibiarkan sebagai catatan historis; jangan diikuti.
 
 **Baca dulu.** Mesin sinyal ini tidak punya edge yang terukur (TEST −0.067 R/trade, PF 0.667). Auto-order tidak mengubah itu; yang diubah hanyalah *siapa* yang menekan tombol. Karena itu jalur ini dibangun sebagai **mesin rugi yang dibatasi**, bukan mesin profit: semuanya default mati, default DRY RUN, dan berhenti sendiri kalau menyentuh plafon. Yang dikejar di sini adalah "saldo tidak minus dan sistem berhenti sebelum rusak", bukan "+$25 apa pun yang terjadi" — mengejar target dengan memperbesar lot adalah martingale dan tidak diimplementasikan.
 
@@ -330,6 +456,55 @@ riskusd=…` ditulis; status EA basi (`now − ts > watchdog`) membuat `tick()` 
 apa pun. Satu hal yang sempat salah di test ini dan perlu diingat: `mkt1` harus membawa **ATR(14) M15**
 seperti yang dilaporkan EA (`InAtrTF = PERIOD_M15`), bukan rentang 1 menit — dengan ATR 1 menit R4
 menolak semua rencana dengan alasan biaya (1,88 < 2,4) yang sebenarnya palsu.
+
+#### Dua sumber harga — terminal hidup pakai EA, terminal mati pakai Binance (sinyal jalan terus, order tidak)
+
+Kegagalan yang paling sering terjadi pada mesin ini bukan sinyal dan bukan guard: `sniper_status.txt`
+berhenti diperbarui karena terminal Wine mati atau EA lepas dari chart. Sampai hari itu konsekuensinya
+scanner ikut berhenti — `tick()` keluar dengan "status EA basi" dan tidak ada satu pun rencana lahir,
+padahal pertanyaan yang ingin dijawab operator ("apakah sistem masih melihat peluang?") tidak butuh
+broker. Sejak `bridge/feed.js` ada, loop tetap jalan dengan harga publik Binance, dan yang berhenti
+hanya sisi eksekusinya.
+
+```
+sniper_status.txt segar  -> sumber "mt5"     -> fire -> eaSpreadCap -> rt.submit() -> sniper_req.txt
+tidak ada / basi         -> bridge/feed.js   -> fire -> catatan PAPER, submit() tidak pernah dipanggil
+```
+
+Aturannya satu: **order hanya boleh lahir dari harga yang juga dipakai terminal memeriksa drift** — itu
+alasan scanner ini ada, jadi feed cadangan tidak boleh mewarisinya. Selama `priceSource != "mt5"`,
+`fire()` mengirim rencana ke `note('paper')`, menaikkan `counts.paper`, lalu `release(plan,false)`
+(buang rencananya, cooldown mesin tetap jalan) — `sniper_req.txt` tidak pernah dibuat dan
+`state.orders` tetap kosong, bahkan dengan `autoArm=true`. Guard sendiri juga masih menutup jalur itu
+dari sisi lain: `expertRank`/`guardDecide` membaca `sniper_status.txt`, jadi `submit()` akan berbunyi
+"pair tidak ada di Market Watch EA" / watchdog kalau ada yang memaksa.
+
+Cara feed meniru `mkt1` (dan di sinilah dua kekeliruan satuan ditemukan):
+
+* **Satuan poin = 10^−digits broker** (`pointsPerPip`/`brokerPoint` di `server.js`), bukan `pip/100`.
+  BTC kebetulan sama (pip 1, dp 2 ⇒ 100), jadi `pip/100` lolos uji BTC dan meleset 10× di EURUSD/XAUUSD
+  (dp 5 dan 2 ⇒ 10 poin per pip). Sekarang `quoteOf`/`atr15Of` diuji langsung terhadap angka yang
+  ditulis EA: EURUSD 28, XAUUSD 45, BTCUSD 2000, ETHUSD 200 points.
+* **Spread yang dipakai = `typSpread` broker** ditata simetris di sekitar mid Binance (konvensi yang sama
+  dengan `tools/fetch_klines.js`), karena spread Binance (±0,01 %) bukan biaya yang akan dibayar di akun
+  FBS (BTC ±$20); memakainya akan membuat audit biaya R4/`minCost`/pagar EA optimistis palsu. Untuk spread
+  ganjil (XAUUSD 45 poin) sisinya 23/22 — mid kutipan bergeser setengah tick, dan engine hanya membaca
+  `(ask+bid)/2`.
+* **ATR(14) pada bar 15 menit**, emberan terakhir yang masih berjalan dibuang — sama seperti
+  `InAtrTF = PERIOD_M15`.
+
+Yang harus diketahui jujur tentang proksinya: hanya 4 pair yang punya `binance` di `PAIRS`
+(EURUSD→EURUSDT, XAUUSD→PAXGUSDT, BTCUSD/ETHUSD), dan proksinya tidak setara. Pada hari pengujian,
+EURUSDT menyimpang ~1,3 % dari harga FBS dan rentang 15 menitnya hampir nol, PAXGUSDT bergerak ~7×
+lebih tenang dari XAUUSD terminal (ATR M15 $0,98 vs $7,46). Artinya feed cadangan layak untuk
+**BTC/ETH** (keduanya memang 24/7 dan tidak pernah ditutup), dan untuk XAU/EUR hanya sebagai
+"mesin masih hidup", bukan sebagai angka biaya yang bisa dipercaya. `counts.paper` memisahkan sinyal
+jenis ini dari sinyal yang benar-benar bisa dieksekusi, dan panel menyebut sumbernya:
+`harga BINANCE (EA offline • sinyal paper, order terkunci)`.
+
+`fallbackFeed` default **aktif**; matikan dengan `"fallbackFeed": false` di `bridge/config.json` atau
+`node bridge/server.js --no-feed`. Harga cadangan bukan harga broker, jadi ia tidak pernah membuat
+`tick()` mengaku segar: `pickSource()` memakai `watchdogMs` yang sama untuk kedua sumber.
 
 
 `ranking` menjawab pertanyaan "pasangan mana yang boleh dibuka dengan saldo ini", aturan R1–R9, tiap penolakan punya string alasan (bukan sekadar hilang dari daftar):
