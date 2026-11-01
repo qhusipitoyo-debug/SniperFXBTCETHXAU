@@ -39,6 +39,7 @@ tidak ikut terkirim — buat sekali:
 
 ```bash
 node tools/pair_stats.js             # ±15 menit: replay engine atas data lokal, semua pair × semua mode
+node tools/collector.js              # daemon: kumpulkan plan 24/7 ke stats/live_ledger.jsonl walau tab tertutup
 ```
 
 Langkah proxy hanya untuk feed OANDA / Capital.com.
@@ -65,6 +66,9 @@ node tools/calibrate.js --report                # evaluasi ulang config default 
 # 3) regression anti-kedip & UI headless
 node tools/latch_test.js                        # episode SETUP, progress, % kartu terpaku saat plan aktif
 node tools/ui_smoke.js                          # DOM/WS stub: error runtime, churn board/jam
+FX_SNIPER_EMPTY_STATS=1 node tools/ui_smoke.js  # belum ada berkas stats: panel harus tetap lengkap
+FX_SNIPER_STALE_DAEMON=1 node tools/ui_smoke.js # collector mati: ledger boleh tampil, "aktif" tidak
+node tools/collector.js --replay data/ETHUSDT_1m.csv --pairs ETHUSD   # jalur ingest daemon tanpa jaringan
 node backtest.js data/EURUSDT_1m.csv --pair EURUSD --mode balanced
 
 # 4) uji apakah ARAH itu sendiri membawa informasi (tanpa SL/TP/BE sama sekali)
@@ -234,7 +238,7 @@ Ada dua angka, dan keduanya sengaja dipisah:
 |---|---|---|
 | **REPLAY DATA UJI** | `node tools/pair_stats.js` → `stats/pair_stats.json` | engine dijalankan di atas tick historis lokal (`data/*_1m.csv`), semua pair × semua mode. Jendela tiap pair sepanjang datanya ada (45–365 hari, tertulis di baris sumber panel). Ini yang dipakai untuk menilai kualitas model. |
 | **WINRATE PER JAM UTC** | kolom `hours` di berkas yang sama + ledger tab ini | 24 sel, dipecah dari **jam masuk sinyal** (bukan jam keluar), dijumlahkan lintas pair pada mode yang sedang dipilih. Menjawab "jam berapa scanner ini layak dipakai". |
-| **CATATAN LIVE** | `localStorage` tab ini (`fxSniper2`) | plan yang benar-benar terkunci lalu selesai selama tab terbuka. Mulai dari nol, bertambah lambat — jangan dinilai sebelum samplesnya cukup. |
+| **CATATAN LIVE** | `stats/live_ledger.jsonl` (daemon) + `localStorage` tab ini (`fxSniper2`) | plan yang benar-benar terkunci lalu selesai. Yang dari daemon bertambah terus walau tab tertutup; yang dari tab mulai dari nol. Jangan dinilai sebelum sampelnya cukup. |
 
 Vonis dihitung dari ambang yang sejak awal dipakai proyek ini (`backtest.js`, `walkforward.js`):
 
@@ -287,6 +291,58 @@ terkunci biasanya **tidak bergerak ke mana-mana** — sinyal dapat arah tapi tid
 "winrate" yang ada sebagian besar adalah "kena time-stop dalam posisi untung kecil". Untuk EUR/USD
 cuma satu plan dalam 45 hari, sehingga semua angka "winrate" pair itu selama ini adalah satu kejadian.
 
+## Daemon pengumpul data 24/7 — `tools/collector.js`
+
+Selama ini catatan live hanya ada selama tab terbuka: ledger-nya `localStorage`, jadi ia ikut
+hilang saat laptop tidur dan tidak pernah terlihat di GitHub Pages. `collector.js` memindahkan
+pengumpulan ke Node: satu proses, satu WebSocket ke feed yang sama, engine yang sama
+(`engine.js`), dan hasilnya ditulis ke berkas yang bisa dibaca panel.
+
+**Tidak ada dependency.** Node ≥ 22 sudah punya `WebSocket` dan `fetch` global — tidak ada
+`package.json`, tidak ada `npm install`.
+
+```bash
+node tools/collector.js                                  # feed deriv, semua pair, mode balanced
+node tools/collector.js --pairs=XAUUSD,BTCUSD --modes=balanced,liquidity
+mkdir -p logs && nohup node tools/collector.js >> logs/collector.log 2>&1 &   # tinggal jalan setelah shell ditutup
+node tools/collector.js --replay=data/ETHUSDT_1m.csv --pairs=ETHUSD   # uji 1 jam, tanpa jaringan
+```
+
+Semua argumen diterima dalam dua bentuk (`--pairs=X` atau `--pairs X`). Yang ditulis dua berkas:
+
+| Berkas | Isi |
+|---|---|
+| `stats/live_ledger.jsonl` | satu baris JSON per plan yang **selesai** — `id, pair, mode, feed, t, closedAt, side, done, resultR, mfe, mae, entry, sl, tp1, tp2, spread`. Append-only, tidak pernah ditulis ulang. |
+| `stats/live_stats.json` | ringkasan (+ counter detak jantung: tick, plan, reconnect, error, umur tick terakhir). Ditulis atomik lewat `.tmp` + `rename`, jadi panel tidak pernah membaca separuh berkas. |
+
+Yang dibaca panel adalah **ledger-nya, bukan ringkasannya**: ringkasan tidak bisa digabung
+(maxDD, PF, dan Sharpe dari dua ringkasan bukan rata-rata yang sah), sedangkan baris mentah bisa
+dihitung ulang dengan `E.summarize` yang sama seperti menghitung ledger tab. Karena itu panel
+menyebut sumbernya terpisah — "2 plan dari daemon 24/7 + 1 plan dari tab ini" — dan dedup lewat
+`id` plan (`pair|waktu|sisi`), bukan lewat angka.
+
+Perilaku yang penting untuk proses yang ditinggal tidur:
+
+- **Sambung ulang dengan backoff** 500 ms → 15 dtk (sama seperti `openWS` di `app.js`), plus
+  watchdog: tidak ada pesan apa pun selama 60 dtk dianggap sambungan mati diam → putuskan dan
+  sambung ulang. Konektor yang "hidup" tapi tidak mengirim apa-apa adalah kegagalan yang paling
+  sering terjadi dan paling tidak kelihatan.
+- **Pasar tutup bukan error.** `MarketIsClosed` dicatat sekali per kode (dengan pengali ×N), tidak
+  menaikkan `counters.errors` — kalau tidak, satu akhir pekan akan terbaca sebagai 480 kegagalan
+  padahal daemon-nya sehat dan tinggal menunggu.
+- **Dedup sejak awal:** baris yang sudah ada di ledger dibaca dulu, jadi run kedua atas data yang
+  sama tidak mencatat plan dua kali (`--replay` menulis ke `*.replay.*` supaya tidak pernah
+  menyentuh ledger live).
+- **`SIGINT`/`SIGTERM` = flush lalu keluar** — plan terakhir sempat ditulis, ringkasan sempat diperbarui.
+- Exception tunggal tidak mematikan daemon (dijaga `uncaughtException`), tapi lebih dari 30 dalam
+  satu menit dianggap hot loop dan prosesnya keluar supaya kelihatan di log.
+- Detak jantung tiap 5 menit satu baris: tick, wsMsg, plan, uptime, umur tick terakhir.
+
+`stats/live_stats.json` hanya dipakai panel untuk satu hal: **apakah daemon-nya masih hidup.**
+Ringkasan yang umurnya lewat 10 menit tidak lagi disebut "aktif" — panel menulis kapan terakhir
+berkas itu ditulis dan bilang angkanya tidak akan bertambah. Ini penting karena Pages menyajikan
+berkas apa adanya: ledger kemarin sore akan tampil rapi seolah-olah live.
+
 ## Publikasi: GitHub Pages, tanpa Jekyll
 
 Panel ini sudah statis murni — satu `index.html`, `app.js`, `engine.js`, `styles.css`, dan satu berkas
@@ -307,9 +363,19 @@ Yang perlu diketahui supaya versi online berperilaku sama dengan versi localhost
    konfigurasi apa pun. Jangan menambah `baseurl`/Jekyll config.
 4. **`bridge/`, `mt5/`, dan alat uji MT5 tidak ikut ke repo** (lihat `.gitignore`). Yang tayang hanya
    jalur analisis; `README.md` di bawah ini masih memuat bagian auto-order sebagai catatan historis.
+5. **Yang tayang adalah berkas hasil, bukan prosesnya.** GitHub Pages menjalankan apa pun di browser
+   tetapi tidak menjalankan Node, jadi daemon 24/7 harus hidup di mesin lain (laptop yang tidak
+   ditutup, VPS ±Rp 60rb/bulan, atau Actions cron yang menyalakan collector beberapa menit tiap jam).
+   Output-nya kemudian di-commit seperti `pair_stats.json` — `stats/live_ledger.jsonl` dan
+   `stats/live_stats.json` sengaja **tidak** di-ignore karena itulah yang membuat CATATAN LIVE dan
+   winrate per jam bertambah walau tidak ada tab yang terbuka. Halaman yang di-host akan selalu
+   menampilkan ledger sampai commit terakhir, bukan detik ini; panel menyebut waktu tulis ringkasan
+   supaya selisihnya kelihatan, bukan tersamar.
 
 ```bash
 node tools/pair_stats.js && git add stats/pair_stats.json && git commit -m "stats: replay terbaru"
+node tools/collector.js --replay=data/BTCUSDT_1m.csv --pairs=BTCUSD   # uji tanpa jaringan dulu
+git add stats/live_ledger.jsonl stats/live_stats.json && git commit -m "stats: ledger daemon"
 git push                                                    # Pages: Settings → Pages → Deploy from branch
 ```
 

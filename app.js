@@ -635,6 +635,41 @@ async function loadPairStats(){
   renderPairStats();
 }
 
+/* ---------- daemon 24/7 (tools/collector.js) ----------
+   Yang dibaca adalah LEDGER-nya (satu baris JSON per plan yang selesai), bukan ringkasannya.
+   Alasannya: menggabungkan dua ringkasan menghasilkan rata-rata dari rata-rata — maxDD, PF dan
+   Sharpe tidak bisa diturunkan dari angka gabungan. Dengan baris mentahnya, panel menghitung
+   ulang lewat E.summarize yang sama seperti menghitung ledger tab ini. live_stats.json hanya
+   dipakai untuk satu baris status: apakah daemon-nya masih hidup. */
+let daemon=null,daemonRows=[];
+const stamp=()=>Math.floor(Date.now()/600000);
+
+async function loadDaemon(){
+  try{
+    const [l,s]=await Promise.all([
+      fetch('stats/live_ledger.jsonl?v='+stamp(),{cache:'no-store'}),
+      fetch('stats/live_stats.json?v='+stamp(),{cache:'no-store'})
+    ]);
+    daemonRows=l.ok?String(await l.text()).split('\n').map(x=>x.trim()).filter(Boolean)
+      .map(x=>{try{return JSON.parse(x)}catch{return null}}).filter(x=>x&&x.id&&typeof x.resultR==='number'):[];
+    daemon=s.ok?await s.json():null;
+  }catch(e){daemon=null;daemonRows=[]}   /* daemon belum jalan = keadaan normal, bukan error */
+  renderPairStats();
+}
+
+/* Plan yang sama bisa tercatat di dua tempat kalau tab sempat terbuka saat daemon juga
+   melihatnya. id plan dari engine sudah unik (pair|waktu|sisi), jadi dedup cukup lewat id. */
+function allClosed(mode){
+  const byId=new Map();
+  for(const r of daemonRows)if(!mode||r.mode===mode)byId.set(r.id,
+    {pair:r.pair,side:r.side,resultR:r.resultR,mfe:r.mfe,mae:r.mae,t:r.t,closedAt:r.closedAt,done:r.done,src:'daemon'});
+  /* Ledger tab tidak menyimpan mode, jadi barisnya ikut di semua mode — itu sebabnya
+     sumbernya selalu disebut terpisah, bukan dilebur diam-diam. */
+  for(const e of storedEntries)if(e.pair&&typeof e.resultR==='number'&&!byId.has(e.id))byId.set(e.id,
+    {pair:e.pair,side:e.side,resultR:e.resultR,mfe:e.mfe,mae:e.mae,t:e.generatedAt,closedAt:e.closedAt,done:e.outcome,src:'tab'});
+  return Array.from(byId.values());
+}
+
 function verdictOf(s){
   if(!s||!s.n)return{k:'none',t:'TANPA DATA'};
   if(s.n<SAMPLE_MIN)return{k:'none',t:'SAMPEL '+s.n+'/'+SAMPLE_MIN};
@@ -689,11 +724,11 @@ function hourAgg(mode){
       byPair[k]=(byPair[k]||0)+(x.n||0);
     }
   }
-  /* Ledger tab ini tidak menyimpan mode, jadi angka live adalah "semua mode" —
-     itu sebabnya selisihnya ditulis terpisah (n total, lalu berapa di antaranya live). */
-  for(const e of storedEntries){
-    if(typeof e.resultR!=='number'||!e.generatedAt)continue;
-    const o=b[new Date(e.generatedAt).getUTCHours()];if(!o)continue;
+  /* Ledger gabungan: daemon 24/7 + plan yang selesai di tab ini. Keduanya dihitung dari
+     jam masuk sinyal, sama seperti kolom hours hasil replay. */
+  for(const e of allClosed(mode)){
+    if(!e.t)continue;
+    const o=b[new Date(e.t).getUTCHours()];if(!o)continue;
     o.n++;if(e.resultR>0){o.w++;o.g+=e.resultR}else o.l-=e.resultR;o.liv++;
   }
   return Object.assign(b,{byPair});
@@ -775,16 +810,33 @@ function renderPairStats(){
       '</div>');
   }
 
-  /* --- catatan live per pair, dari ledger lokal tab ini --- */
-  const done=storedEntries.filter(e=>e.pair&&typeof e.resultR==='number');
-  const byPair={};
-  for(const e of done)(byPair[e.pair]=byPair[e.pair]||[]).push({resultR:e.resultR,mfe:e.mfe,mae:e.mae,side:e.side,t:e.generatedAt,closedAt:e.closedAt,done:e.outcome});
+  /* --- catatan live per pair: daemon 24/7 + ledger tab ini, dihitung ulang di sini --- */
+  const done=allClosed(mode),byPair={};
+  for(const e of done)(byPair[e.pair]=byPair[e.pair]||[]).push(e);
   const lk=Object.keys(E.PAIRS).filter(k=>byPair[k]);
+  const src={};for(const e of done)src[e.src]=(src[e.src]||0)+1;
+  /* Ternary wajib dikurung di sini: `kondisi?a:'x' + b` menambah b hanya ke cabang palsu. */
+  const age=daemon&&daemon.counters?(() => {const s=daemon.counters.lastTickAgeS||0;
+    return s<90?s.toFixed(0)+' dtk':(s/60).toFixed(1)+' mnt'})():'';
+  /* Ringkasan ditulis ulang tiap detak jantung (5 mnt) dan tiap plan selesai. Lewat 10 menit
+     berarti collector-nya tidak sedang jalan — menyebutnya "aktif" hanya karena berkasnya
+     ada akan menyajikan angka basi sebagai data hidup. */
+  const fresh=daemon&&daemon.generatedAt?(Date.now()-Number(daemon.generatedAt))/1000:null;
+  const alive=fresh!=null&&fresh<=600;
+  safeText('livePairSrc',((src.daemon||src.tab)?'Sumber: '+[src.daemon?src.daemon+' plan dari daemon 24/7':null,
+    src.tab?src.tab+' plan dari tab ini':null].filter(Boolean).join(' + '):'Sumber: tab ini')+
+    (daemon&&daemon.counters?' • '+(alive?'daemon aktif '+((daemon.uptimeMin||0)/60).toFixed(1)+' jam, '+
+      nf(daemon.counters.ticks,0)+' tick, umur data '+age
+      :'ringkasan terakhir ditulis '+new Date(Number(daemon.generatedAt)).toLocaleString()+
+        ' — collector.js tidak berjalan, angka di atas tidak akan bertambah'):''));
   setBoard('livePairBoard',lk.length?PAIR_HEAD+lk.map(k=>{
     const s=E.summarize(byPair[k]);
     const oc={};for(const t of byPair[k])oc[t.done]=(oc[t.done]||0)+1;
-    return pairRowHtml(E.PAIRS[k].name+' <em>live</em>',Object.assign({},s,{outcome:oc}),Object.keys(oc).sort((a,b)=>oc[b]-oc[a])[0]+' '+oc[Object.keys(oc).sort((a,b)=>oc[b]-oc[a])[0]]+'/'+s.n);
-  }).join(''):'<div class="historyEmpty">Belum ada plan yang terkunci dan selesai di tab ini. Angka akan muncul sendiri setelah feed berjalan.</div>');
+    const first=byPair[k].reduce((a,e)=>Math.min(a,e.t||Infinity),Infinity),last=byPair[k].reduce((a,e)=>Math.max(a,e.t||0),0);
+    return pairRowHtml(E.PAIRS[k].name+' <em>live</em>',Object.assign({},s,{outcome:oc}),
+      'sejak '+new Date(first).toLocaleDateString()+' • terakhir '+new Date(last).toLocaleDateString()+' • '+
+      Object.keys(oc).sort((a,b)=>oc[b]-oc[a])[0]+' '+oc[Object.keys(oc).sort((a,b)=>oc[b]-oc[a])[0]]+'/'+s.n);
+  }).join(''):'<div class="historyEmpty">Belum ada plan yang selesai. Jalankan <b>node tools/collector.js</b> supaya sampel terkumpul walau tab tertutup — angkanya akan muncul sendiri di sini.</div>');
 }
 
 /* ---------- storage ---------- */
@@ -899,6 +951,8 @@ function focusPair(pair){
   render();
   renderPairStats();
   loadPairStats();
+  loadDaemon();
+  setInterval(loadDaemon,60000);   /* ledger daemon ditulis terus; 60 detik cukup, tidak perlu secepat render */
   setInterval(render,500);
   console.log('[app] boot done — feed',selectedFeed,'mode',selectedMode);
 })();

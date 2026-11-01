@@ -7,6 +7,8 @@
      - PIN: berapa % waktu plan terkunci tetap tampil
      - VONIS: tabel statistik harus memuat semua pair dan memberi label BAGUS/MARGINAL/JELEK
    FX_SNIPER_EMPTY_STATS=1 → stats/pair_stats.json dianggap belum ada (404).
+   FX_SNIPER_STALE_DAEMON=1 → ringkasan daemon ada tapi berumur satu jam: panel tidak boleh
+   menyebutnya "aktif".
    Pakai: node tools/ui_smoke.js [SYM=EURUSDT] [JAM=12] [MODE=balanced] [FILTER=action|threshold|all] */
 const fs=require('fs'),path=require('path');
 const SYM=process.argv[2]||'EURUSDT',HOURS=Number(process.argv[3]||12),MODE=process.argv[4]||'balanced',FILTER=process.argv[5]||'action';
@@ -76,14 +78,42 @@ const PAIR_STATS={generatedAt:Date.now()-3600000,
   },
   missing:Object.keys(E.PAIRS).filter(k=>!['BTCUSD','XAUUSD','ETHUSD','EURUSD','USDJPY'].includes(k))
     .map(k=>({pair:k,name:E.PAIRS[k].name,reason:'tidak ada sumber data lokal untuk pair ini'}))};
-/* FX_SNIPER_EMPTY_STATS=1 → stats/pair_stats.json belum dibuat (fetch 404). Panel harus tetap
-   menampilkan SEMUA pair yang dipindai beserta alasannya, bukan blok yang hilang. */
+/* Berkas keluaran tools/collector.js — ledger JSONL (baris mentah per plan) dan ringkasannya.
+   Tiga plan ini cukup untuk menguji: filter mode, sumber gabungan, dan baris status daemon. */
+const DAEMON_LEDGER=[
+  {id:'EURUSD|1|UP',pair:'EURUSD',mode:'balanced',t:Date.now()-3600000,closedAt:Date.now(),side:'UP',done:'TP2',resultR:1.9,mfe:2.1,mae:-.2},
+  {id:'EURUSD|2|DOWN',pair:'EURUSD',mode:'balanced',t:Date.now()-7200000,closedAt:Date.now(),side:'DOWN',done:'SL',resultR:-1,mfe:.1,mae:-1},
+  {id:'XAUUSD|3|UP',pair:'XAUUSD',mode:'momentum',t:Date.now()-3600000,closedAt:Date.now(),side:'UP',done:'TIME',resultR:.3,mfe:.4,mae:-.1}
+];
+const DAEMON_STATS={kind:'live',generatedAt:Date.now(),startedAt:Date.now()-3*3600000,uptimeMin:180.4,
+  feed:'deriv',modes:['balanced','momentum'],pairsTested:2,
+  counters:{ticks:12345,closed:3,reconnects:0,errors:0,lastTickAgeS:2.4},pairs:{},total:{}};
+/* FX_SNIPER_EMPTY_STATS=1 → ketiga berkas belum dibuat (clone baru, daemon belum pernah jalan).
+   Panel harus tetap menampilkan SEMUA pair yang dipindai beserta alasannya, bukan blok yang hilang.
+   FX_SNIPER_STALE_DAEMON=1 → ringkasan berumur 1 jam: berkasnya ADA tapi collector-nya sudah
+   mati, dan panel tidak boleh menyebutnya "aktif". generatedAt diukur dari jam panel (simNow),
+   bukan jam dinding, supaya perbandingan umurnya tidak bergantung pada kapan tesnya jalan. */
+const STALE=!!process.env.FX_SNIPER_STALE_DAEMON;
+/* generatedAt dibaca lewat getter, bukan nilai tetap: jam harness (simNow) maju belasan jam
+   selama replay, jadi tangkai waktu statis akan membuat panel menganggap daemon mati di
+   pemeriksaan terakhir — padahal yang berubah adalah jam tesnya, bukan isi berkas. */
+function statsNow(){
+  const o=Object.assign({},DAEMON_STATS);
+  Object.defineProperty(o,'generatedAt',{get:()=>simNow-(STALE?3600000:60000)});
+  return o;
+}
 function fetch(url,init){
-  fetchCalls.push({url:String(url),method:(init&&init.method)||'GET'});
+  const u=String(url);
+  fetchCalls.push({url:u,method:(init&&init.method)||'GET'});
   const empty=!!process.env.FX_SNIPER_EMPTY_STATS;
-  return Promise.resolve(empty
-    ?{ok:false,status:404,json:()=>Promise.reject(new Error('HTTP 404')),text:()=>Promise.resolve('Not Found')}
-    :{ok:true,status:200,json:()=>Promise.resolve(PAIR_STATS),text:()=>Promise.resolve(JSON.stringify(PAIR_STATS))});
+  if(empty)return Promise.resolve({ok:false,status:404,json:()=>Promise.reject(new Error('HTTP 404')),text:()=>Promise.resolve('Not Found')});
+  if(u.indexOf('live_ledger.jsonl')>=0){
+    const body=DAEMON_LEDGER.map(r=>JSON.stringify(r)).join('\n')+'\n';
+    return Promise.resolve({ok:true,status:200,text:()=>Promise.resolve(body),json:()=>Promise.reject(new Error('bukan JSON'))});
+  }
+  if(u.indexOf('live_stats.json')>=0)
+    return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(statsNow()),text:()=>Promise.resolve(JSON.stringify(statsNow()))});
+  return Promise.resolve({ok:true,status:200,json:()=>Promise.resolve(PAIR_STATS),text:()=>Promise.resolve(JSON.stringify(PAIR_STATS))});
 }
 
 /* ---------- WebSocket stub (laju Deriv) ---------- */
@@ -214,8 +244,36 @@ if(!EMPTY){
   if(HN.indexOf('Terbaik')<0||HN.indexOf('03:00')<0)errors.push('catatan per jam tidak menyebut jam terbaik: '+HN.slice(0,120).replace(/</g,'〈'));
   if(HN.indexOf('avgR dan PF kasar')<0)errors.push('catatan per jam tidak membatasi apa yang dinilai — maxDD per jam tidak ada artinya');
 }else{
-  if(hcell('none')!==24)errors.push('tanpa berkas replay semua 24 jam harus kosong, dapat '+hcell('none'));
+  /* Tanpa berkas replay, sampel yang ada hanyalah ledger tab ini — beberapa plan saja, jadi
+     yang harus dijamin adalah TIDAK ADA jam yang dinilai. Sel mana yang terisi bergantung pada
+     jam berapa plan tab itu selesai, jadi jumlah sel "none" tidak bisa dijadikan assertion. */
+  if(hcell('good')+hcell('marginal')+hcell('bad')>0)
+    errors.push('jam dinilai dari sampel tab saja (<20 trade) — seharusnya semuanya "tipis" atau kosong');
   if(HN.indexOf('Belum ada satu jam pun')<0)errors.push('papan kosong tanpa penjelasan ambang sampel');
+}
+/* Daemon 24/7: panel membaca LEDGER (baris mentah), bukan ringkasannya, dan menyaring
+   berdasar mode — jadi mode balanced hanya boleh melihat 2 plan EURUSD, bukan yang momentum. */
+const LB=els.livePairBoard?String(els.livePairBoard.innerHTML):'';
+const LS=els.livePairSrc?String(els.livePairSrc.textContent||els.livePairSrc.innerHTML):'';
+console.log('  daemon 24/7        : '+(LS.slice(0,96)||'(kosong)')+(STALE?' [ringkasan berumur 1 jam]':''));
+if(!EMPTY){
+  if(LS.indexOf('dari daemon 24/7')<0)errors.push('sumber catatan live tidak menyebut daemon: '+LS.slice(0,90));
+  if(STALE){
+    /* Berkas ada tapi sudah sejam tidak ditulis ulang = collector mati. Panel tidak boleh
+       memajang "daemon aktif 3.0 jam" untuk angka yang berhenti bertambah. */
+    if(LS.indexOf('daemon aktif')>=0)errors.push('ringkasan berumur satu jam masih disebut aktif: '+LS.slice(0,90));
+    if(LS.indexOf('collector.js tidak berjalan')<0)errors.push('collector yang mati tidak dilaporkan di baris sumber: '+LS.slice(0,90));
+  }else{
+    if(LS.indexOf('3.0 jam')<0)errors.push('umur daemon tidak dibaca dari live_stats.json: '+LS.slice(0,90));
+  }
+  if(LB.indexOf('ETH/USD')>=0)errors.push('plan momentum tidak boleh masuk saat mode balanced (baris XAUUSD tersaring)');
+  if(!/EUR\/USD/.test(LB))errors.push('ledger daemon tidak muncul di CATATAN LIVE');
+}else{
+  if(LS.indexOf('daemon')>=0)errors.push('tanpa berkas daemon tidak boleh ada klaim daemon di baris sumber: '+LS.slice(0,90));
+  /* papan kosong = belum ada plan sama sekali → wajib menyebut cara menyalakan collector.
+     Kalau ledger tab ini sudah punya plan, papan memang berisi baris, bukan pesan kosong. */
+  if(LB.indexOf('historyEmpty')>=0&&LB.indexOf('collector.js')<0)
+    errors.push('CATATAN LIVE kosong tanpa cara menyalakan collector.js');
 }
 if(errors.length>dicetak)console.log('\n  ✘ pemeriksaan isi panel gagal ('+(errors.length-dicetak)+'):\n     '+errors.slice(dicetak).join('\n     '));
 process.exitCode=errors.length?1:0;}

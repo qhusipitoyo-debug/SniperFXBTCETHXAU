@@ -4,6 +4,13 @@
 # panel di GitHub Pages membacanya lewat fetch dan tidak bisa menjalankan Node.
 data/
 
+# Keluaran uji collector (--replay) selalu berakhiran .replay dan sengaja dipisahkan dari
+# ledger live. Ledger aslinya (stats/live_ledger.jsonl + stats/live_stats.json) justru
+# ikut di-commit: itu satu-satunya cara panel di GitHub Pages melihat hasil daemon 24/7,
+# karena Pages hanya menyajikan berkas dan tidak bisa menjalankan Node.
+stats/*.replay.json
+stats/*.replay.jsonl
+
 # Koridor MT5/bridge masih ada di disk sebagai rujukan, tetapi sengaja tidak di-publish:
 # panel ini analisis lokal, tidak ada jalur order, dan repo-nya publik.
 bridge/
