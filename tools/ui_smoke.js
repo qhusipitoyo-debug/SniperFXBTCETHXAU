@@ -255,14 +255,23 @@ const htot=(HB.match(/class="hourCell /g)||[]).length;
 console.log('  per jam UTC        : '+htot+' sel • BAGUS '+hcell('good')+' MARGINAL '+hcell('marginal')+' JELEK '+hcell('bad')+' tipis '+hcell('thin')+' kosong '+hcell('none'));
 if(htot!==24)errors.push('papan per jam harus 24 sel, dapat '+htot);
 if(!EMPTY){
-  /* Dites per sel, bukan lewat jumlah: ledger live tab ini menambah trade ke jam yang mana saja,
-     jadi "tepat N sel berlabel X" akan gagal/lolos tergantung jam berapanya sekarang. */
-  const at=h=>{const m=HB.match(new RegExp('class="hourCell ([a-z]+)"><b>'+String(h).padStart(2,'0')+':00'));return m?m[1]:'(tidak ada sel)'};
-  console.log('  vonis per sel      : 03:00='+at(3)+' 09:00='+at(9)+' 15:00='+at(15)+' 21:00='+at(21));
-  if(at(3)!=='good')errors.push('jam 03:00 (n=40, avgR +0,7, PF 2,4) harus BAGUS, dapat '+at(3));
-  if(at(9)!=='marginal')errors.push('jam 09:00 (avgR>0 tapi PF 1,05) harus MARGINAL, dapat '+at(9));
-  if(at(15)!=='bad')errors.push('jam 15:00 (avgR<0, PF 0,4) harus JELEK, dapat '+at(15));
-  if(at(21)!=='thin')errors.push('jam 21:00 (n=8 < 20) harus "tipis", bukan dinilai, dapat '+at(21));
+  /* Dites per sel, bukan lewat jumlah. CATATAN: sel ini hasil GABUNGAN replay + ledger hidup
+     (daemon dan plan yang selesai di tab), dan baris live jatuh di jam menurut jam dinding saat
+     tes jalan — satu baris TP2 saja menggeser PF fixture 1,05 ke 1,15 dan membalikkan vonis sel.
+     Jadi sel yang memuat baris live tidak boleh ditagih label fixture-nya: dilewati dengan catatan.
+     Keempat cabang vonis tetap dijamin di level pair (assertion "tepat 1 baris MARGINAL" di atas),
+     jadi melewati satu sel tidak membuat satu cabang pun berhenti teruji. */
+  const cellHtml=h=>{const m=HB.match(new RegExp('class="hourCell ([a-z]+)"><b>'+String(h).padStart(2,'0')+':00[\\s\\S]{0,140}?</div>'));return m?m[0]:''};
+  const at=h=>{const m=cellHtml(h).match(/class="hourCell ([a-z]+)"/);return m?m[1]:'(tidak ada sel)'};
+  const liveAt=h=>{const m=cellHtml(h).match(/• (\d+) live/);return m?+m[1]:0};
+  const CHECK=[[3,'good','n=40, avgR +0,7, PF 2,4'],[9,'marginal','avgR>0 tapi PF 1,05'],[15,'bad','avgR<0, PF 0,4'],[21,'thin','n=8 < 20, tidak dinilai']];
+  const skipped=CHECK.filter(([h])=>liveAt(h)>0).map(([h])=>String(h).padStart(2,'0')+':00/'+liveAt(String(h))+' live');
+  console.log('  vonis per sel      : '+CHECK.map(([h])=>String(h).padStart(2,'0')+':00='+at(h)).join(' '));
+  CHECK.forEach(([h,exp,why])=>{
+    if(liveAt(h)>0)return;
+    if(at(h)!==exp)errors.push('jam '+String(h).padStart(2,'0')+':00 ('+why+') harus '+exp.toUpperCase()+', dapat '+at(h));
+  });
+  if(skipped.length)console.log('  sel dilewati      : '+skipped.join(', ')+' — vonisnya gabungan fixture+live, tidak bisa ditagih ke fixture');
   if(HN.indexOf('Terbaik')<0||HN.indexOf('03:00')<0)errors.push('catatan per jam tidak menyebut jam terbaik: '+HN.slice(0,120).replace(/</g,'〈'));
   if(HN.indexOf('avgR dan PF kasar')<0)errors.push('catatan per jam tidak membatasi apa yang dinilai — maxDD per jam tidak ada artinya');
 }else{
