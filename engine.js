@@ -16,28 +16,86 @@
    v5 (latch): countdown konfirmasi diakumulasi + grace + peluruhan (tidak lagi nol karena satu gate kedip),
    kondisi "plan aktif / cooldown / rugi harian" dipisah dari gate sinyal (kandidat & plan terkunci tetap tampil),
    brkScore dibuat simetris (tidak lagi memihak BUY), spread & lonjakan volatilitas ikut masuk gate grace.
+
+   v6 (kalibrasi jam per pair): PAIRS.hours allowlist UTC dari pair_stats (XAU/BTC 365h, ETH 45h),
+   modeFloor per pair, dan inSession/sessionLabel diekspor agar bridge R2 memakai jam yang sama.
+   PERINGATAN (lihat log 2-11-2026 di README): angka "XAU PF 1.18→1.72, BTC −0.033→+0.063 PF 1.63"
+   adalah hasil IN-SAMPLE — jamnya dipilih di jendela yang sama dengannya dinilai. tools/_hour_oos.js
+   menguji ulang dengan jam dipilih hanya di TRAIN: di TEST pemotongan itu MEMBURUK (BTC −0.040→−0.102
+   di split 0.6, −0.041→−0,089 di split 0.5; XAU tetap ≈0, ETH tanpa tenaga statistik). Allowlist di
+   bawah berstatus TIDAK TERVALIDASI, bukan perbaikan yang terbukti.
+
+   v6.1 (2-11-2026, keputusan operator): PAIRS.hours TIDAK LAGI memblokir. Ia tetap tersimpan sebagai
+   prior/label (sessionLabel + out.priorOut), tapi gerbang sesi kembali ke jendela sess[0]..sess[1) dan h24.
+   Alasannya bukan "edge-nya hilang" melainkan "edge-nya belum pernah diuji": allowlist itu dipilih in-sample
+   dan keluar-sampel justru memburuk, sementara untuk tujuh major FX gerbang ATR/biaya sudah menolak hampir
+   semua evaluasi sehingga tidak ada satu trade pun yang mengkalibrasi jam. Jadi jam dibiarkan jadi informasi,
+   bukan penentu. Konsekuensi: BTC/ETH (h24) bisa fire di jam berapa pun — yang menahan tetap blackout berita,
+   pasar tutup, dan seluruh gerbang mutu.
    ============================================================ */
 (function(root){
 'use strict';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 
 /* pip, dp, quoteUSD, maxSpread (pips, batas ENTRY), typSpread (pips, biaya asumsi broker retail — EDIT sesuai akun MT5-mu),
-   sess = jendela jam UTC [mulai,akhir) yang diizinkan untuk ENTRY (asumsi awal — verifikasi dengan breakdown per jam di backtest) */
+   sess = jendela jam UTC [mulai,akhir) fallback ENTRY,
+   hours = allowlist jam UTC PRIOR. Sejak v6.1 hanya LABEL/diagnostik (out.priorOut + sessionLabel) —
+           tidak lagi memblokir; yang menahan entry tetap sess[0]..sess[1) (h24 untuk crypto).
+           STATUS per 2-11-2026 (uji keluar-sampel tools/_hour_oos.js, lihat log README):
+           - XAU/BTC/ETH: dipilih in-sample dari tools/_hour_probe.js. Di TEST pemotongan itu tidak mengangkat apa pun
+             (BTC justru −0,040→−0,102 R/trade). BUKAN hasil kalibrasi yang terbukti — pertahankan hanya kalau
+             memang mau dipakai sebagai pembatas risiko, bukan sebagai sumber edge.
+           - FX major: TIDAK ada dasar data sama sekali. tools/_fx_funnel.js: gerbang ATR/biaya menolak 89,8–100,0%
+             evaluasi dalam sesi (AUD/CAD nol eval lolos), 35 hari → n=0–4 trade per pair. Isinya prior likuiditas
+             (London/NY), dan selama `typSpread` retail bertahan daftar ini tidak mengubah perilaku apa pun
+             karena mesin tidak pernah fire di jam mana pun.
+   calib = override opsional per pair (params + modeFloor). modeFloor = lantai ambang (Math.max dengan mode).
+           STATUS per 2-11-2026 (tools/_floor_oos.js, floor diuji dengan hours=null): floor yang menang di TRAIN
+           membuat TEST memburuk (XAU −0,010→−0,050 R/trade, 36 trade jadi 17) dan prosedur jujur justru memilih
+           nilai lain (XAU lebih ketat, ETH = default balanced, EUR nol kandidat). Dipertahankan atas keputusan
+           operator sebagai PENEBAT RISIKO berlabel, bukan sebagai kalibrasi yang terbukti menaikkan PF. */
 const PAIRS={
-  /* typSpread = biaya asumsi broker retail FBS-Demo (diukur dari sniper_status.txt), BUKAN
-     spread Binance. Angka lama (EUR 1.0 pip) membuat audit biaya lolos palsu lalu rugi di eksekusi. */
-  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:2.8,sess:[7,16], binance:'eurusdt'},
-  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:4.0,sess:[0,16], binance:null},
-  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[7,16], binance:null},
-  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[7,16], binance:null},
-  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[0,16], binance:null},
-  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[12,20],binance:null},
-  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.0,sess:[0,16], binance:null},
+  /* typSpread = biaya ASUMSI broker ritel yang dipakai gerbang ATR/biaya, BUKAN spread hasil rekaman:
+     komentar lama menyebutnya "diukur dari sniper_status.txt", dan itu tidak bisa dibuktikan — file
+     data/*_1m.csv justru menuliskan spread = typSpread (tools/fetch_deriv.js:62), jadi angkanya
+     memantul balik. Pengukuran nyata pertama ada 2-11-2026 (tools/_spread_measure.js --akun=180 pada
+     terminal hidup, 181 baris status): akun FBS-Real membayar 0,90–1,20 pips untuk tujuh major dan
+     2,50 pips untuk emas vs asumsi 2,80–4,50 — yaitu 3–5× TERLALU KETAT di major, 1,0× untuk crypto
+     (BTC 19,65 / ETH 19,30 vs asumsi 20). Angkanya TIDAK dipasang ke sini: keputusan operator
+     "ukur dulu, belum dipasang", dan satu jendela 180 detik bukan distribusi. Angka lama (EUR 1.0 pip)
+     pernah membuat audit biaya lolos palsu lalu rugi di eksekusi — itu sebabnya lantainya tinggi. */
+  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:2.8,sess:[7,16],
+    hours:[7,8,9,10,11,12,13,14,15], calib:{modeFloor:{minCost:4.0}}, binance:'eurusdt',deriv:'frxEURUSD'},
+  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:4.0,sess:[0,16],
+    hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxUSDJPY'},
+  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[7,16],
+    hours:[7,8,9,10,11,12,13,14,15], binance:null,deriv:'frxGBPUSD'},
+  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[7,16],
+    hours:[7,8,9,12,13,14,15], binance:null,deriv:'frxUSDCHF'},
+  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[0,16],
+    hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxAUDUSD'},
+  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[12,20],
+    hours:[12,13,14,15,16,17,18,19], binance:null,deriv:'frxUSDCAD'},
+  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.0,sess:[0,16],
+    hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxNZDUSD'},
   /* --- Emas & crypto. pip: XAU 0.1, BTC 1, ETH 0.1. units = kontrak/lot di FBS (cek spesifikasi).
-     typSpread BTC/ETH mengikuti poin broker (≈19–20 pip). h24 = tidak kena weekend FX. */
-  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:4.5,sess:[7,20], binance:'paxgusdt',deriv:'frxXAUUSD'},
-  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:20, sess:[0,24], binance:'btcusdt', deriv:'cryBTCUSD'},
-  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:20, sess:[0,24], binance:'ethusdt', deriv:'cryETHUSD'}
+     typSpread BTC/ETH mengikuti poin broker (≈19–20 pip). h24 = tidak kena weekend FX.
+     TIGA baris di bawah adalah angka IN-SAMPLE (jam dipilih di jendela yang sama), lihat catatan `hours`
+     di atas dan tools/_hour_oos.js:
+       hours XAU: potong jam 9,14,16–19 → PF 1,18→1,72 in-sample; TEST ≈ 0 di dua split (n=28–32 saja).
+       hours BTC: 8,9,19,23 (14 dibuang) → avgR −0,033→+0,063 in-sample; jam yang sama dipilih TANPA TEST
+                  justru memberi avgR −0,102 di TEST. Baris "shipped" yang bagus di TEST = kebocoran.
+       ETH 45h: tidak ada jam dengan n≥6 → tidak ada dasar; modeFloor juga in-sample dan memperkecil n.
+     EUR major: edge arah belum ada di data (signal_test: −0,022 ATR p=0,184; n=0 trade di sumber Deriv). */
+  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:4.5,sess:[7,16],
+    hours:[7,8,10,11,13,15], calib:{modeFloor:{minScore:.50,minER:.33,minCost:3.8}},
+    binance:'paxgusdt',deriv:'frxXAUUSD'},
+  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:20, sess:[0,24],
+    hours:[8,9,19,23],
+    binance:'btcusdt', deriv:'cryBTCUSD'},
+  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:20, sess:[0,24],
+    hours:[0,2,4,10,11,12,17,19], calib:{modeFloor:{minScore:.52,minER:.34,minCost:4.0}},
+    binance:'ethusdt', deriv:'cryETHUSD'}
 };
 
 const PARAMS={
@@ -94,6 +152,31 @@ const closedFX=t=>{const d=new Date(t);if(FX_HOLIDAYS.has(mmdd(d)))return true;
   const day=d.getUTCDay(),h=d.getUTCHours();return day===6||(day===5&&h>=22)||(day===0&&h<22)};
 const isClosed=(pairKey,t)=>{const P=PAIRS[pairKey];return P&&P.h24?false:closedFX(t)};
 
+/* Entry session (v6.1): hanya jendela sess[0]..sess[1) yang memblokir; h24 selalu true (kecuali hard closed).
+   Skip SESS_EDGE_MS di menit awal sess[0] supaya noise open tidak ikut. PAIRS.hours TIDAK dipakai lagi di sini
+   — lihat outsidePrior(); ia label, bukan gerbang. */
+function inSession(pairKey,t,prm){
+  const P=PAIRS[pairKey];if(!P)return false;
+  const edge=prm&&prm.SESS_EDGE_MS!=null?prm.SESS_EDGE_MS:PARAMS.SESS_EDGE_MS;
+  const d=new Date(t),h=d.getUTCHours(),m=d.getUTCMinutes();
+  if(P.h24)return true;
+  if(!(h>=P.sess[0]&&h<P.sess[1]))return false;
+  if(h===P.sess[0]&&m*60000<edge)return false;
+  return true;
+}
+/* true bila jam UTC t ada di luar prior jam (hours[]) pair — murni informasi, tidak pernah memblokir. */
+function outsidePrior(pairKey,t){
+  const P=PAIRS[pairKey];
+  if(!P||!Array.isArray(P.hours)||!P.hours.length)return false;
+  return !P.hours.includes(new Date(t).getUTCHours());
+}
+function sessionLabel(pairKey){
+  const P=PAIRS[pairKey];if(!P)return '';
+  const win=P.h24?'24/7 UTC':P.sess[0]+':00–'+P.sess[1]+':00 UTC';
+  if(Array.isArray(P.hours)&&P.hours.length)return win+' · prior jam '+P.hours.join(',')+' (label, tidak memblokir)';
+  return win;
+}
+
 function summarize(list){
   const n=list.length;
   const NULL={n:0,wins:0,winRate:null,avgR:null,totalR:0,pf:null,maxDD:0,mfeAvg:null,maeAvg:null,geoMiss:null,dirMiss:null,
@@ -128,9 +211,15 @@ function summarize(list){
 function create(pairKey,opts){
   opts=opts||{};
   const P=PAIRS[pairKey];if(!P)throw new Error('Pair tidak dikenal: '+pairKey);
-  const prm=Object.assign({},PARAMS,opts.params||{});
+  const cal=P.calib||{};
+  const prm=Object.assign({},PARAMS,cal.params||{},opts.params||{});
   let modeName=opts.mode||'balanced';
-  let mode=Object.assign({},MODES[modeName]||MODES.balanced,opts.modeOverride||{});
+  let mode=Object.assign({},MODES[modeName]||MODES.balanced);
+  /* modeFloor = lantai per pair (tidak melonggarkan mode ketat seperti edge/auto). */
+  if(cal.modeFloor){for(const k of Object.keys(cal.modeFloor)){
+    const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v);
+  }}
+  if(opts.modeOverride)mode=Object.assign(mode,opts.modeOverride);
   const stale=opts.stale||15000, hasFlow=!!opts.hasFlow, feed=opts.feed||'';
   const rd=v=>Number(Number(v).toFixed(P.dp));
   const S1_KEEP=Math.max(1200,prm.BAR_MIN*60*20);  // detik histori harga mentah: harus menutup jendela HTF 15 bar
@@ -194,14 +283,7 @@ function create(pairKey,opts){
     return c?sum/c:0;
   }
   const ema=(arr,n)=>{const a=2/(n+1);let e=arr[0];for(let i=1;i<arr.length;i++)e=a*arr[i]+(1-a)*e;return e};
-  function inSession(t){
-    if(P.h24)return true;
-    const h=new Date(t).getUTCHours(),m=new Date(t).getUTCMinutes();
-    if(!(h>=P.sess[0]&&h<P.sess[1]))return false;
-    // skip noise di pembukaan jendela sesi
-    if(h===P.sess[0]&&m*60000<prm.SESS_EDGE_MS)return false;
-    return true;
-  }
+  const inSess=t=>inSession(pairKey,t,prm);
   function newsWindow(t){
     const d=new Date(t),m=d.getUTCHours()*60+d.getUTCMinutes();
     for(const w of prm.NEWS_BLACKOUT)if(m>=w[0]&&m<w[1])return w;
@@ -327,7 +409,8 @@ function create(pairKey,opts){
     let hard='',hardClosed=false;
     if(isClosed(pairKey,now)){hard='Pasar tutup';hardClosed=true}
     else if(newsWindow(now)){const w=newsWindow(now);hard='Jendela berita '+String(Math.floor(w[0]/60)).padStart(2,'0')+':'+String(w[0]%60).padStart(2,'0')+'–'+String(Math.floor(w[1]/60)).padStart(2,'0')+':'+String(w[1]%60).padStart(2,'0')+' UTC'}
-    else if(!inSession(now))hard='Di luar sesi ('+P.sess[0]+':00–'+P.sess[1]+':00 UTC)';
+    else if(!inSess(now))hard='Di luar sesi ('+sessionLabel(pairKey)+')';
+    const priorOut=outsidePrior(pairKey,now);
     let blocked='';
     if(trade)blocked='Plan aktif '+trade.side+' @ '+trade.entry+' — tunggu selesai';
     else if(dayLoss)blocked='Batas rugi harian '+prm.MAX_DAILY_LOSS_R+'R tercapai';
@@ -366,8 +449,8 @@ function create(pairKey,opts){
     Object.assign(out,{status:'ok',side,score,confidence:Math.abs(score)*100,
       upProbability:(1+score)/2,downProbability:(1-score)/2,potential:costRatio,alignment:aligned,
       near:Math.abs(score)>=mode.minScore*(holding?prm.NEAR_EXIT:prm.NEAR_ENTER),
-      r1m:p/p60-1,r3m:p/p180-1,r15m:p900?p/p900-1:0,
-      f:{mom,trend,loc,brk,brkN,htf,flow,flowOK,er,atrP,cost,spreadPips,volRatio,costRatio,session:inSession(now),minCost:mode.minCost,minScore:mode.minScore,
+      r1m:p/p60-1,r3m:p/p180-1,r15m:p900?p/p900-1:0,priorOut,
+      f:{mom,trend,loc,brk,brkN,htf,flow,flowOK,er,atrP,cost,spreadPips,volRatio,costRatio,session:inSess(now),minCost:mode.minCost,minER:mode.minER,minScore:mode.minScore,
         /* z/retrace/SL ikut dibagikan supaya tools/signal_test.js bisa menilai ulang tiap gerbang
            di luar mesin (ablation). Tanpa ini beberapa gerbang tidak bisa direkonstruksi dari rekaman. */
         z60d,z180d,retrace,slTooFar:si.tooFar,side:d}});
@@ -433,12 +516,14 @@ function create(pairKey,opts){
        kandidatnya: lepaskan rencana, mulai ulang jendela konfirmasi, dan hapus cooldown mesin
        supaya sinyal yang sama bisa diminta kembali dengan harga tick terbaru. */
     rearm:id=>{if(trade&&trade.id===id){trade=null;lastEntry=0;cand.prog=0;cand.bleed=0}},
-    setMode:n=>{if(MODES[n]){modeName=n;mode=Object.assign({},MODES[n],opts.modeOverride||{})}},
+    setMode:n=>{if(MODES[n]){modeName=n;mode=Object.assign({},MODES[n]);
+      if(cal.modeFloor){for(const k of Object.keys(cal.modeFloor)){const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v)}}
+      if(opts.modeOverride)Object.assign(mode,opts.modeOverride)}},
     modeCfg:()=>mode,params:()=>prm,pair:()=>P,
     get trade(){return trade},get closed(){return closed},get dayR(){return dayR.r}
   };
 }
 
-const API={PAIRS,PARAMS,MODES,create,summarize,closedFX,isClosed,H24_KEYS:Object.keys(PAIRS).filter(k=>PAIRS[k].h24),FX_HOLIDAYS:[...FX_HOLIDAYS].sort()};
+const API={PAIRS,PARAMS,MODES,create,summarize,closedFX,isClosed,inSession,outsidePrior,sessionLabel,H24_KEYS:Object.keys(PAIRS).filter(k=>PAIRS[k].h24),FX_HOLIDAYS:[...FX_HOLIDAYS].sort()};
 if(typeof module!=='undefined'&&module.exports)module.exports=API;else root.FXEngine=API;
 })(typeof window!=='undefined'?window:globalThis);

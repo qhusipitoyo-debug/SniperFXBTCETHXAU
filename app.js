@@ -367,9 +367,14 @@ function lotFor(plan){
 
 function planCardHtml(pair,x,s,now){
   const q=quotes[pair]||{},c=PAIRS[pair],dp=c.dp;
-  const locked=plans[pair]&&!plans[pair].done&&plans[pair].pair===pair;
-  const preview=(!locked&&s.confirming&&engines[pair])?engines[pair].preview(s.side):null;
-  const p=locked?plans[pair]:preview;
+  const stored=plans[pair]&&plans[pair].pair===pair?plans[pair]:null;
+  const locked=!!(stored&&!stored.done),fin=!!(stored&&stored.done);
+  /* Blok angka muncul di TIGA keadaan kartu, bukan satu: plan terkunci, plan selesai
+     (operator masih butuh entry/SL/TP yang tadi), dan countdown (preview, berhak marked ≈
+     karena belum dieksekusi). Sebelumnya kartu DONE kehilangan seluruh angkanya karena
+     `locked` menuntut !done — itulah "sudah muncul tapi tidak ada nilai entry dan TP/SL-nya". */
+  const preview=(!locked&&!fin&&s.confirming&&engines[pair])?engines[pair].preview(s.side):null;
+  const p=locked||fin?stored:preview;
   const buy=s.side==='UP',lbl=buy?'BUY':'SELL';
   const stageCls=s.stage==='ENTRY'?'entry':(s.stage==='DONE'?'done':(s.confirming?'setup':'watch'));
   const pct=Math.max(0,Math.min(100,Math.round((s.prog/Math.max(1,s.persistMs))*100)));
@@ -377,15 +382,21 @@ function planCardHtml(pair,x,s,now){
   if(p){
     const f=v=>v.toFixed(dp);
     const L=lotFor(p);
+    const doneLbl=fin?({SL:'🔴 SL',TP2:'🏆 TP2',BE:'⚪ BE',TIME:'⏱ TIME'})[p.done]||p.done:'';
     levels=`
       <div class="alertLevels">
-        <div><span>ENTRY</span><b>${locked?'':'≈ '}${f(p.entry)}</b></div>
-        <div><span>SL</span><b>${f(p.sl)}</b></div>
+        <div><span>ENTRY</span><b>${locked||fin?'':'≈ '}${f(p.entry)}</b></div>
+        <div><span>SL</span><b>${f(p.sl)} · ${L.slPips.toFixed(1)}p</b></div>
         <div><span>TP1</span><b>${f(p.tp1)}</b></div>
         <div><span>TP2</span><b>${f(p.tp2)}</b></div>
         <div><span>LOT</span><b>${L.lot.toFixed(2)}</b></div>
         <div><span>RISK</span><b>$${L.riskUsd.toFixed(2)}</b></div>
+        ${fin?`<div><span>HASIL</span><b>${doneLbl} ${fmtR(p.resultR)}</b></div>`:''}
       </div>
+      <div class="alertPlanNote">${
+        locked?`🔒 TERKUNCI — ${lbl} ${f(p.entry)}, SL ${f(p.sl)}, ${L.lot.toFixed(2)} lot ≈ $${L.riskUsd.toFixed(2)} risiko. 50% ditutup di TP1 ${f(p.tp1)}, sisanya ke TP2 ${f(p.tp2)}, SL digeser ke entry setelah +${EP.BE_AT_R}R.`
+        :fin?`${lbl} ${f(p.entry)} → ${doneLbl} ${fmtR(p.resultR)} (risiko tadi $${L.riskUsd.toFixed(2)} / ${L.lot.toFixed(2)} lot, SL ${f(p.sl)}).`
+        :`≈ PREVIEW — dihitung dari bar terakhir, BELUM terkunci. ${s.busy?'countdown ditahan: '+s.busy:'countdown '+pct+'%'}. Angka ini baru bisa dipakai kalau seluruh gerbang bertahan sampai 100%.`}</div>
       <button class="copyOne" data-pair="${pair}">COPY PLAN</button>`;
   }
   const bar=s.stage==='ENTRY'?'<div class="cdBar ok"><i style="width:100%"></i></div>'
@@ -415,9 +426,10 @@ function scanRowHtml(pair,x,s,now){
   const active=pair===selectedPair?'active':'';
   const st=s.stage==='ENTRY'?'entry':(s.confirming?'setup':'');
   const secs=q.ts?Math.round(Math.max(0,now-q.ts)/1000):'—';
+  const hb=x.hard?(x.hard.indexOf('Di luar sesi')===0?' ⏰':x.hard.indexOf('Jendela berita')===0?' 📰':' 🚫'):'';
   return `<button type="button" class="scanRow ${active} ${st}" data-pair="${pair}">
     <span class="scanPair">${c.name}</span>
-    <span class="scanStage">${s.stage}${s.busy&&!s.locked?'⏳':''}</span>
+    <span class="scanStage">${s.stage}${s.busy&&!s.locked?'⏳':''}${hb}</span>
     <span class="scanSide ${s.side==='UP'||s.side==='DOWN'?(buy?'upText':'downText'):''}">${s.side==='WAIT'?'—':(buy?'BUY':'SELL')}</span>
     <span class="scanScore">${x.status==='ok'?sgn(x.score):'—'}</span>
     <span class="scanMid">${q.last?q.last.toFixed(dp):'—'}</span>
@@ -513,8 +525,42 @@ function drawChart(pair){
   }catch(e){console.warn('chart',e)}
 }
 
-/* ---------- main render ---------- */
-function render(){
+/* Papan kosong = tidak ada yang lolos gerbang, bukan alatnya mati. Strip ini memperlihatkan
+   jarak setiap market ke kartu TERKUNCI: berapa persen countdown latch sudah jalan (hanya
+   naik kalau SEMUA gerbang lolos bersamaan) dan gerbang mana yang menahan. Angka-angkanya
+   dibaca dari keluaran engine yang sama seperti kartu ENTRY. Tidak ada ambang yang diubah
+   di sini; yang diubah hanya kejelasan. */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function whyEmptyHtml(rows){
+  const no=v=>`<span class="whyNo">${esc(v)}</span>`,yes=v=>`<span class="whyOk">${esc(v)}</span>`;
+  const list=rows.map(({pair,x})=>{
+    const c=PAIRS[pair],f=x.f||{},persist=Math.max(1,x.persistMs||20000);
+    const pctv=Math.max(0,Math.min(100,Math.round((x.prog||0)/persist*100)));
+    const penahan=x.hard||x.blocked||(x.reason||'').split(' • ')[0].replace(/^Disaring:\s*/,'')||'—';
+    return{pair,c,x,f,persist,pctv,penahan,blocked:!!(x.hard||x.blocked)};
+  });
+  /* yang paling siap naik ke atas: countdown lebih dulu, baru |skor| */
+  list.sort((a,b)=>b.pctv-a.pctv||Math.abs(b.x.score||0)-Math.abs(a.x.score||0));
+  const best=list[0];
+  const head=`<div class="whyRow whyHead"><span>PAIR</span><span>SISI</span><span>SKOR</span><span>KUNCI</span><span>PENAHAN UTAMA</span><span>ATR/biaya · ER · spread</span></div>`;
+  const body=list.map(r=>{
+    const side=r.x.side==='UP'?'<span class="upText">BUY</span>':r.x.side==='DOWN'?'<span class="downText">SELL</span>':'<span class="whyMuted">—</span>';
+    const bar=`<span class="whyLock"><i style="width:${r.pctv}%"></i>${r.pctv}%</span>`;
+    const gates=r.blocked||!r.x.f?'<span class="whyMuted">—</span>':
+      (r.f.costRatio>=r.f.minCost?yes(r.f.costRatio.toFixed(1)+'× vs '+r.f.minCost+'×'):no(r.f.costRatio.toFixed(1)+'/'+r.f.minCost+'×'))+
+      ' '+(r.f.er>=r.f.minER?yes('ER '+r.f.er.toFixed(2)):no('ER '+r.f.er.toFixed(2)+' < '+r.f.minER))+
+      ' <span class="whyMuted">spr '+r.f.spreadPips.toFixed(1)+'p · biaya '+r.f.cost.toFixed(1)+'p</span>';
+    const prior=Array.isArray(r.c.hours)&&r.c.hours.length?
+      ` <span class="${r.x.priorOut?'whyPrior':'whyMuted'}">${r.x.priorOut?'luar':'dalam'} prior jam ${r.c.hours.join(',')} (label)</span>`:'';
+    return `<div class="whyRow"><b>${r.c.name}</b>${side}<span>${r.x.status==='ok'?sgn(r.x.score):'—'}</span>${bar}`+
+      `<span class="${r.blocked?'whyBlk':'whyNo'}">${esc(r.penahan)}${prior}</span>${gates}</div>`;
+  }).join('');
+  const hint=best&&!best.blocked&&best.pctv<100?
+    `<div class="whyNote">Terdekat: <b>${esc(best.c.name)}</b> ${best.pctv}% dari ${Math.round(best.persist/1000)} detik countdown — terkunci hanya kalau SELURUH gerbang lolos BERSAMAAN dan bertahan sampai 100%; satu gerbang kedip = countdown berhenti. Tidak ada threshold yang diturunkan untuk memaksanya.</div>`:'';
+  return `<div class="whyEmpty"><div class="whyNote">0 kartu ENTRY/SETUP — feed hidup (${rows.length} pair jalan), yang menahan adalah gerbang ini. Baris diurutkan dari yang paling dekat ke TERKUNCI.</div>${head}${body}${hint}</div>`;
+}
+
+/* ---------- main render ---------- */function render(){
   try{
     const now=Date.now();
     if(feedClosedAt!==null&&feedClosedAt!==E.closedFX(now)){console.log('[feed] bursa '+(E.closedFX(now)?'TUTUP → tinggal crypto':'BUKA → FX ikut lagi')+' — langganan feed diulang');startFeed()}
@@ -567,7 +613,7 @@ function render(){
     safeText('feedLabel',caps().label+' · multi');
     safeSetClass('binanceDot',fresh||live>0?'live':'warn');
 
-    setBoard('alertBoard',alertHtml.length?alertHtml.join(''):'<div class="historyEmpty">Belum ada ENTRY/SETUP. Scanner memantau '+keys.join(', ')+'.</div>');
+    setBoard('alertBoard',alertHtml.length?alertHtml.join(''):whyEmptyHtml(rows));
     setBoard('scanBoard','<div class="scanHead"><span>PAIR</span><span>STAGE</span><span>SIDE</span><span>SCORE</span><span>MID</span><span>AGE</span></div>'+scanHtml.join(''));
 
     safeText('spotPrice',fq.last?fq.last.toFixed(dp):'—');

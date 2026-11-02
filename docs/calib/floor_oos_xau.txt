@@ -1,0 +1,14 @@
+modeFloor OOS • mode=balanced eval=2000 split=0.6 • hours=null (floor diuji sendiri, tanpa allowlist)
+kandidat floor dinilai di TRAIN dengan syarat n≥20 — kandidat di bawah 20 trade tidak boleh menang
+
+==== XAUUSD (PAXGUSDT_1m.csv, 2102412 tick, 365.0 hari) shipped floor = score≥0.5 er≥0.33 cost≥3.8 ====
+   TRAIN tanpa floor                 n= 59 wr= 54.2% avgR=  0.109 PF=1.99 tot=   6.46   —
+   TRAIN floor shipped               n= 48 wr= 47.9% avgR=  0.097 PF=1.89 tot=   4.66   score≥0.5 er≥0.33 cost≥3.8
+   TRAIN floor +1 langkah (lebih ketat)n= 39 wr= 59.0% avgR=  0.142 PF=2.25 tot=   5.55   score≥0.52 er≥0.34 cost≥4
+   TRAIN floor −1 langkah (lebih longgar)n= 59 wr= 54.2% avgR=  0.109 PF=1.99 tot=   6.46   score≥0.48 er≥0.32 cost≥3.6
+   → dipilih di TRAIN: floor +1 langkah (lebih ketat)  score≥0.52 er≥0.34 cost≥4
+   TEST baseline tanpa floor n= 36 wr= 47.2% avgR= -0.010 PF=0.95 tot=  -0.37
+   TEST floor terpilih TRAIN n= 17 wr= 35.3% avgR= -0.050 PF=0.76 tot=  -0.86  ΔavgR -0.040R/trade
+   → TIDAK PUTUSKAN (TEST n=36 vs 17, butuh ≥20 dua-duanya). Yang tetap terbukti: floor ini MEMOTONG sampel tanpa bukti manfaat.
+   TEST floor shipped (in-sample) n= 28 wr= 46.4% avgR=  0.006 PF=1.03 tot=   0.17
+

@@ -83,11 +83,20 @@ function pack(tr){
 
 const pairs={},missing=[];
 for(const key of Object.keys(E.PAIRS)){
-  const sym=E.PAIRS[key].binance?String(E.PAIRS[key].binance).toUpperCase():null;
-  const file=sym?path.join(ROOT,'data',sym+'_1m.csv'):null;
-  const ticks=file&&fs.existsSync(file)?load(file):null;
+  /* Urutan sumber: Binance symbol (kalau ada), lalu data/<PAIR>_1m.csv dari Deriv fetch. */
+  const cands=[];
+  if(E.PAIRS[key].binance)cands.push(path.join(ROOT,'data',String(E.PAIRS[key].binance).toUpperCase()+'_1m.csv'));
+  cands.push(path.join(ROOT,'data',key+'_1m.csv'));
+  let file=null,ticks=null;
+  for(const f of cands){
+    if(!fs.existsSync(f))continue;
+    const rows=load(f);
+    if(rows.length>=1000){file=f;ticks=rows;break}
+    if(!ticks||rows.length>(ticks?ticks.length:0)){file=f;ticks=rows}
+  }
+  const sym=file?path.basename(file).replace(/_1m\.csv$/i,''):null;
   if(!ticks||ticks.length<1000){
-    missing.push({pair:key,name:E.PAIRS[key].name,reason:file?('data kurang ('+(ticks?ticks.length:0)+' baris di '+path.basename(file)+') — jalankan tools/fetch_klines.js'):'tidak ada sumber data lokal untuk pair ini'});
+    missing.push({pair:key,name:E.PAIRS[key].name,reason:file?('data kurang ('+(ticks?ticks.length:0)+' baris di '+path.basename(file)+') — jalankan tools/fetch_klines.js atau tools/fetch_deriv.js'):'tidak ada sumber data lokal untuk pair ini (fetch_deriv.js / fetch_klines.js)'});
     console.log('· '+key.padEnd(7)+' lewat  '+(missing[missing.length-1].reason));
     continue;
   }

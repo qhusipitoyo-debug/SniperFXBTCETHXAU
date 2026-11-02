@@ -45,6 +45,9 @@
 .cdBar.ok i{background:linear-gradient(90deg,#1c6a45,var(--up))}
 .cdBar.hold i{background:linear-gradient(90deg,#3a4a5e,#607084)}
 .alertLevels{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.alertLevels>div:last-child{grid-column:1/-1}
+.alertPlanNote{color:#93a1b3;font-size:8.5px;font-weight:800;line-height:1.45;margin-top:5px}
+.alertCard.done .alertPlanNote{color:#7d8aa0}
 .alertLevels>div{background:#0d141d;border:1px solid #1c2632;border-radius:8px;padding:6px 7px}
 .alertLevels span{display:block;color:#6f7c8c;font-size:8px;font-weight:900;letter-spacing:.08em}
 .alertLevels b{display:block;margin-top:2px;font-size:12px}
@@ -126,3 +129,14 @@
 .hourNote{margin-top:10px;display:flex;flex-direction:column;gap:6px}
 .hourNote b{color:#c9d6e5}
 @media(max-width:900px){.hourBoard{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* papan kosong yang menjelaskan dirinya sendiri (lihat whyEmptyHtml di app.js) */
+.whyEmpty{display:flex;flex-direction:column;gap:2px}
+.whyNote{color:#8b98a8;font-size:9px;line-height:1.5;margin-bottom:6px}
+.whyRow{display:grid;grid-template-columns:1.05fr .5fr .55fr .75fr 2.1fr 1.7fr;gap:7px;align-items:center;padding:5px 0;border-bottom:1px solid #1b2430;font-size:9px;font-weight:800}
+.whyRow b{color:#cbd3dd;font-size:10px}
+.whyHead{color:#5d6a7f;font-size:8px;letter-spacing:.06em;border-bottom:1px solid #222c3a;padding-bottom:3px}
+.whyLock{position:relative;display:inline-flex;align-items:center;gap:4px;background:#151d27;border:1px solid #222c3a;border-radius:3px;padding:1px 4px;overflow:hidden}
+.whyLock i{position:absolute;left:0;top:0;bottom:0;background:#2b4b64;opacity:.75}
+.whyOk{color:#79eab0}.whyNo{color:#ff8f98}.whyBlk{color:#f0c674}.whyMuted{color:#66738a;font-weight:700}
+.whyPrior{color:#5f6bb0;font-weight:700}
+@media(max-width:650px){.whyRow{grid-template-columns:1fr 1fr}}

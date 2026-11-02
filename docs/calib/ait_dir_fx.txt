@@ -1,0 +1,42 @@
+Uji arah grid-breakout aiterminaltrading vs sinyal engine • horizon 15 mnt • grid 15 pips • confirm 2 scan • EMA(M1) 20 • session=true news=true • split=0.6
+CATATAN: "scan" mereka = 1 detik; data kita 15 detik, jadi CONFIRM=2 di sini = tertahan 30 detik, bukan 2 detik. Konsekuensinya sinyal kita lebih sedikit DAN lebih tertunda — ini versi konservatif dari aturan mereka, bukan salinan identik.
+
+==== EURUSD (EURUSD_1m.csv, 35.2 hari, grid = 0.00150) ====
+   sinyal: grid 456 → 280 sampel | engine 34894 → 2322 sampel
+   grid mereka (breakout sel 15p, EMA searah)
+        TRAIN  n= 175 edge= -0.027 ATR  p=0.666 ✘  selang95=[-0.126,0.118]  drag=-0.428  bersih=-0.455
+        TEST   n= 105 edge= -0.046 ATR  p=0.619 ✘  selang95=[-0.196,0.162]  drag=-0.503  bersih=-0.549
+   engine ini (arah mentah dari evaluate, tanpa gerbang)
+        TRAIN  n=1388 edge=  0.001 ATR  p=0.967 ✘  selang95=[-0.046,0.044]  drag=-0.556  bersih=-0.555
+        TEST   n= 934 edge= -0.013 ATR  p=0.573 ✘  selang95=[-0.043,0.047]  drag=-0.596  bersih=-0.609
+   di TEST yang berimpit dengan sinyal engine (±1 horizon): searah 54 • berlawanan 51
+        searah  n=  54 edge= -0.161 ATR  p=0.233 ✘  selang95=[-0.294,0.233]  drag=-0.550  bersih=-0.711
+        berlawanann=  51 edge=  0.075 ATR  p=0.598 ✘  selang95=[-0.255,0.279]  drag=-0.453  bersih=-0.378
+   → selisih edge TEST (grid − engine) = 0.014 ATR. Dua-duanya angka sendiri: tidak ada uji beda dua sampel di sini, jadi selisih kecil jangan dibaca sebagai kesimpulan.
+
+==== GBPUSD (GBPUSD_1m.csv, 35.2 hari, grid = 0.00150) ====
+   sinyal: grid 527 → 305 sampel | engine 34868 → 2320 sampel
+   grid mereka (breakout sel 15p, EMA searah)
+        TRAIN  n= 187 edge= -0.045 ATR  p=0.433 ✘  selang95=[-0.112,0.116]  drag=-0.600  bersih=-0.645
+        TEST   n= 118 edge= -0.008 ATR  p=0.920 ✘  selang95=[-0.155,0.152]  drag=-0.699  bersih=-0.707
+   engine ini (arah mentah dari evaluate, tanpa gerbang)
+        TRAIN  n=1387 edge= -0.008 ATR  p=0.720 ✘  selang95=[-0.043,0.039]  drag=-0.761  bersih=-0.769
+        TEST   n= 933 edge= -0.014 ATR  p=0.557 ✘  selang95=[-0.044,0.048]  drag=-0.806  bersih=-0.820
+   di TEST yang berimpit dengan sinyal engine (±1 horizon): searah 60 • berlawanan 58
+        searah  n=  60 edge= -0.046 ATR  p=0.719 ✘  selang95=[-0.247,0.276]  drag=-0.725  bersih=-0.770
+        berlawanann=  58 edge=  0.032 ATR  p=0.770 ✘  selang95=[-0.213,0.201]  drag=-0.673  bersih=-0.641
+   → selisih edge TEST (grid − engine) = 0.006 ATR. Dua-duanya angka sendiri: tidak ada uji beda dua sampel di sini, jadi selisih kecil jangan dibaca sebagai kesimpulan.
+
+==== USDJPY (USDJPY_1m.csv, 35.2 hari, grid = 0.150) ====
+   sinyal: grid 591 → 350 sampel | engine 34868 → 2320 sampel
+   grid mereka (breakout sel 15p, EMA searah)
+        TRAIN  n= 220 edge=  0.024 ATR  p=0.675 ✘  selang95=[-0.113,0.108]  drag=-0.406  bersih=-0.382
+        TEST   n= 130 edge= -0.071 ATR  p=0.217 ✘  selang95=[-0.115,0.113]  drag=-0.444  bersih=-0.515
+   engine ini (arah mentah dari evaluate, tanpa gerbang)
+        TRAIN  n=1387 edge=  0.002 ATR  p=0.939 ✘  selang95=[-0.041,0.039]  drag=-0.503  bersih=-0.501
+        TEST   n= 933 edge= -0.024 ATR  p=0.298 ✘  selang95=[-0.053,0.042]  drag=-0.517  bersih=-0.541
+   di TEST yang berimpit dengan sinyal engine (±1 horizon): searah 77 • berlawanan 53
+        searah  n=  77 edge= -0.063 ATR  p=0.343 ✘  selang95=[-0.141,0.132]  drag=-0.446  bersih=-0.510
+        berlawanann=  53 edge= -0.083 ATR  p=0.359 ✘  selang95=[-0.184,0.166]  drag=-0.441  bersih=-0.524
+   → selisih edge TEST (grid − engine) = 0.026 ATR. Dua-duanya angka sendiri: tidak ada uji beda dua sampel di sini, jadi selisih kecil jangan dibaca sebagai kesimpulan.
+

@@ -1,0 +1,312 @@
+FX gate funnel • mode=balanced eval=2000ms • hours dipaksa 0-23 (bukan allowlist)
+
+==== EURUSD (EURUSDT_1m.csv, 259200 tick) ====
+eval ok=174964  pasar-tutup=69120  berita=14240  blocked=645  prog≥persist=531  fired=3  progMax=20s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   1.71 / 3.16 / 38.55   butuh ≥3.5
+   ER          0.23 / 0.57 / 0.83   butuh ≥0.32
+   |skor|      0.28 / 0.60 / 0.87   butuh ≥0.48
+   ATR pips    4.8 / 8.9 / 107.9   (biaya 2.8 pips)
+  gerbang yang PALING sering menolak (dari 174964 eval dalam sesi):
+   ATR/biaya           163208   93.3%  lolos=  11756
+   Skor                139059   79.5%  lolos=  35905
+   ER (choppy)         112832   64.5%  lolos=  62132
+   Brk ceil             86541   49.5%  lolos=  88423
+   Mom&trend searah     72586   41.5%  lolos= 102378
+   Mom&trend cukup      52547   30.0%  lolos= 122417
+   retrace              32239   18.4%  lolos= 142725
+   HTF tidak lawan       7657    4.4%  lolos= 167307
+   SL swing valid        2975    1.7%  lolos= 171989
+   Brk floor             2144    1.2%  lolos= 172820
+   z jangan kejar        1749    1.0%  lolos= 173215
+   spike volatilitas      116    0.1%  lolos= 174848
+  lolos SEMUA gerbang sekaligus: 52 eval (0.030%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  2.8 pips →   11756 eval (  6.72%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →    9708 eval (  5.55%)
+   biaya  2.5 pips →   18864 eval ( 10.78%)
+   biaya  2.0 pips →   36004 eval ( 20.58%)
+   biaya  1.5 pips →   75300 eval ( 43.04%)
+   biaya  1.0 pips →  132896 eval ( 75.96%)
+   biaya  0.7 pips →  173564 eval ( 99.20%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -Brk ceil                888
+   -ATR/biaya               400
+   -retrace                 293
+   -Skor                    256
+   -ER (choppy)              86
+   -Mom&trend searah         52
+   -Mom&trend cukup          52
+   -HTF tidak lawan          52
+   -Brk floor                52
+   -z jangan kejar           52
+   -SL swing valid           52
+   -spread                   52
+   -spike volatilitas        52
+  trade closed n=3  [{"t":"2026-10-29T23:48","side":"UP","why":"BE","R":"0.50"},{"t":"2026-10-30T06:19","side":"UP","why":"TIME","R":"0.65"},{"t":"2026-10-30T07:54","side":"UP","why":"TIME","R":"-0.04"}]
+
+==== GBPUSD (GBPUSD_1m.csv, 141268 tick) ====
+eval ok=128832  pasar-tutup=0  berita=10640  blocked=0  prog≥persist=0  fired=0  progMax=0s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   1.28 / 2.16 / 3.08   butuh ≥3.5
+   ER          0.22 / 0.53 / 0.76   butuh ≥0.32
+   |skor|      0.28 / 0.63 / 0.89   butuh ≥0.48
+   ATR pips    5.8 / 9.7 / 13.9   (biaya 4.5 pips)
+  gerbang yang PALING sering menolak (dari 128832 eval dalam sesi):
+   ATR/biaya           128532   99.8%  lolos=    300
+   Skor                100132   77.7%  lolos=  28700
+   ER (choppy)          88336   68.6%  lolos=  40496
+   Brk ceil             60113   46.7%  lolos=  68719
+   Mom&trend searah     53159   41.3%  lolos=  75673
+   Mom&trend cukup      38020   29.5%  lolos=  90812
+   retrace              26571   20.6%  lolos= 102261
+   SL swing valid       26280   20.4%  lolos= 102552
+   HTF tidak lawan       7587    5.9%  lolos= 121245
+   Brk floor             1389    1.1%  lolos= 127443
+   z jangan kejar        1119    0.9%  lolos= 127713
+  lolos SEMUA gerbang sekaligus: 0 eval (0.000%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.5 pips →     300 eval (  0.23%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →    8400 eval (  6.52%)
+   biaya  2.5 pips →   19940 eval ( 15.48%)
+   biaya  2.0 pips →   43640 eval ( 33.87%)
+   biaya  1.5 pips →   72256 eval ( 56.09%)
+   biaya  1.0 pips →  111348 eval ( 86.43%)
+   biaya  0.7 pips →  128236 eval ( 99.54%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -ATR/biaya               166
+   -Brk ceil                 30
+   -ER (choppy)               0
+   -Skor                      0
+   -Mom&trend searah          0
+   -Mom&trend cukup           0
+   -HTF tidak lawan           0
+   -Brk floor                 0
+   -z jangan kejar            0
+   -retrace                   0
+   -SL swing valid            0
+   -spread                    0
+   -spike volatilitas         0
+  trade closed n=0  []
+
+==== USDJPY (USDJPY_1m.csv, 141268 tick) ====
+eval ok=128832  pasar-tutup=0  berita=10640  blocked=1062  prog≥persist=811  fired=4  progMax=20s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   2.04 / 3.52 / 5.17   butuh ≥3.5
+   ER          0.21 / 0.50 / 0.75   butuh ≥0.32
+   |skor|      0.30 / 0.62 / 0.85   butuh ≥0.48
+   ATR pips    8.2 / 14.1 / 20.7   (biaya 4.0 pips)
+  gerbang yang PALING sering menolak (dari 128832 eval dalam sesi):
+   ATR/biaya           115712   89.8%  lolos=  13120
+   Skor                 98776   76.7%  lolos=  30056
+   ER (choppy)          89172   69.2%  lolos=  39660
+   Brk ceil             63657   49.4%  lolos=  65175
+   Mom&trend searah     53965   41.9%  lolos=  74867
+   Mom&trend cukup      37533   29.1%  lolos=  91299
+   retrace              26164   20.3%  lolos= 102668
+   HTF tidak lawan       6531    5.1%  lolos= 122301
+   SL swing valid        5138    4.0%  lolos= 123694
+   z jangan kejar        1321    1.0%  lolos= 127511
+   Brk floor              554    0.4%  lolos= 128278
+  lolos SEMUA gerbang sekaligus: 91 eval (0.071%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.0 pips →   13120 eval ( 10.18%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →   39060 eval ( 30.32%)
+   biaya  2.5 pips →   56300 eval ( 43.70%)
+   biaya  2.0 pips →   81740 eval ( 63.45%)
+   biaya  1.5 pips →  109432 eval ( 84.94%)
+   biaya  1.0 pips →  124012 eval ( 96.26%)
+   biaya  0.7 pips →  128772 eval ( 99.95%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -Brk ceil                575
+   -Skor                    279
+   -ATR/biaya               232
+   -ER (choppy)             180
+   -retrace                 138
+   -Mom&trend searah         91
+   -Mom&trend cukup          91
+   -HTF tidak lawan          91
+   -Brk floor                91
+   -z jangan kejar           91
+   -SL swing valid           91
+   -spread                   91
+   -spike volatilitas        91
+  trade closed n=4  [{"t":"2026-10-01T15:25","side":"DOWN","why":"TIME","R":"-0.26"},{"t":"2026-10-22T08:02","side":"DOWN","why":"TIME","R":"0.14"},{"t":"2026-10-23T01:15","side":"DOWN","why":"SL","R":"-1.01"}]
+
+==== USDCHF (USDCHF_1m.csv, 141272 tick) ====
+eval ok=128836  pasar-tutup=0  berita=10640  blocked=0  prog≥persist=0  fired=0  progMax=0s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   0.99 / 1.70 / 2.72   butuh ≥3.5
+   ER          0.21 / 0.52 / 0.74   butuh ≥0.32
+   |skor|      0.29 / 0.62 / 0.86   butuh ≥0.48
+   ATR pips    4.5 / 7.7 / 12.5   (biaya 4.6 pips)
+  gerbang yang PALING sering menolak (dari 128836 eval dalam sesi):
+   ATR/biaya           128805  100.0%  lolos=     31
+   Skor                 98872   76.7%  lolos=  29964
+   ER (choppy)          88957   69.0%  lolos=  39879
+   Brk ceil             64337   49.9%  lolos=  64499
+   Mom&trend searah     52160   40.5%  lolos=  76676
+   SL swing valid       51211   39.7%  lolos=  77625
+   Mom&trend cukup      38151   29.6%  lolos=  90685
+   retrace              24683   19.2%  lolos= 104153
+   HTF tidak lawan       5806    4.5%  lolos= 123030
+   z jangan kejar        1162    0.9%  lolos= 127674
+   Brk floor              612    0.5%  lolos= 128224
+  lolos SEMUA gerbang sekaligus: 0 eval (0.000%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.5 pips →      60 eval (  0.05%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →    2620 eval (  2.03%)
+   biaya  2.5 pips →    7340 eval (  5.70%)
+   biaya  2.0 pips →   18780 eval ( 14.58%)
+   biaya  1.5 pips →   45960 eval ( 35.67%)
+   biaya  1.0 pips →   90608 eval ( 70.33%)
+   biaya  0.7 pips →  118996 eval ( 92.36%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -ATR/biaya               167
+   -ER (choppy)               0
+   -Skor                      0
+   -Mom&trend searah          0
+   -Mom&trend cukup           0
+   -HTF tidak lawan           0
+   -Brk floor                 0
+   -Brk ceil                  0
+   -z jangan kejar            0
+   -retrace                   0
+   -SL swing valid            0
+   -spread                    0
+   -spike volatilitas         0
+  trade closed n=0  []
+
+==== AUDUSD (AUDUSD_1m.csv, 141276 tick) ====
+eval ok=128840  pasar-tutup=0  berita=10640  blocked=0  prog≥persist=0  fired=0  progMax=0s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   0.82 / 1.31 / 2.04   butuh ≥3.5
+   ER          0.21 / 0.51 / 0.73   butuh ≥0.32
+   |skor|      0.28 / 0.62 / 0.88   butuh ≥0.48
+   ATR pips    3.7 / 6.0 / 9.3   (biaya 4.6 pips)
+  gerbang yang PALING sering menolak (dari 128840 eval dalam sesi):
+   ATR/biaya           128840  100.0%  lolos=      0
+   Skor                100557   78.0%  lolos=  28283
+   ER (choppy)          87548   68.0%  lolos=  41292
+   SL swing valid       71539   55.5%  lolos=  57301
+   Brk ceil             62845   48.8%  lolos=  65995
+   Mom&trend searah     54069   42.0%  lolos=  74771
+   Mom&trend cukup      37790   29.3%  lolos=  91050
+   retrace              26634   20.7%  lolos= 102206
+   HTF tidak lawan       6370    4.9%  lolos= 122470
+   z jangan kejar        1051    0.8%  lolos= 127789
+   Brk floor              735    0.6%  lolos= 128105
+  lolos SEMUA gerbang sekaligus: 0 eval (0.000%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.5 pips →       0 eval (  0.00%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →     360 eval (  0.28%)
+   biaya  2.5 pips →    2000 eval (  1.55%)
+   biaya  2.0 pips →    6540 eval (  5.08%)
+   biaya  1.5 pips →   19960 eval ( 15.49%)
+   biaya  1.0 pips →   75472 eval ( 58.58%)
+   biaya  0.7 pips →  118140 eval ( 91.70%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -ATR/biaya                94
+   -ER (choppy)               0
+   -Skor                      0
+   -Mom&trend searah          0
+   -Mom&trend cukup           0
+   -HTF tidak lawan           0
+   -Brk floor                 0
+   -Brk ceil                  0
+   -z jangan kejar            0
+   -retrace                   0
+   -SL swing valid            0
+   -spread                    0
+   -spike volatilitas         0
+  trade closed n=0  []
+
+==== USDCAD (USDCAD_1m.csv, 141276 tick) ====
+eval ok=128840  pasar-tutup=0  berita=10640  blocked=0  prog≥persist=0  fired=0  progMax=0s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   1.02 / 1.80 / 2.68   butuh ≥3.5
+   ER          0.25 / 0.55 / 0.77   butuh ≥0.32
+   |skor|      0.31 / 0.63 / 0.86   butuh ≥0.48
+   ATR pips    4.6 / 8.1 / 12.1   (biaya 4.5 pips)
+  gerbang yang PALING sering menolak (dari 128840 eval dalam sesi):
+   ATR/biaya           128840  100.0%  lolos=      0
+   Skor                 97354   75.6%  lolos=  31486
+   ER (choppy)          80039   62.1%  lolos=  48801
+   Brk ceil             69048   53.6%  lolos=  59792
+   Mom&trend searah     51024   39.6%  lolos=  77816
+   SL swing valid       44591   34.6%  lolos=  84249
+   Mom&trend cukup      34207   26.5%  lolos=  94633
+   retrace              25974   20.2%  lolos= 102866
+   HTF tidak lawan       7032    5.5%  lolos= 121808
+   z jangan kejar        1206    0.9%  lolos= 127634
+   Brk floor             1115    0.9%  lolos= 127725
+  lolos SEMUA gerbang sekaligus: 0 eval (0.000%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.5 pips →       0 eval (  0.00%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →    4140 eval (  3.21%)
+   biaya  2.5 pips →    9540 eval (  7.40%)
+   biaya  2.0 pips →   22280 eval ( 17.29%)
+   biaya  1.5 pips →   48408 eval ( 37.57%)
+   biaya  1.0 pips →   95432 eval ( 74.07%)
+   biaya  0.7 pips →  125336 eval ( 97.28%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -ATR/biaya               122
+   -ER (choppy)               0
+   -Skor                      0
+   -Mom&trend searah          0
+   -Mom&trend cukup           0
+   -HTF tidak lawan           0
+   -Brk floor                 0
+   -Brk ceil                  0
+   -z jangan kejar            0
+   -retrace                   0
+   -SL swing valid            0
+   -spread                    0
+   -spike volatilitas         0
+  trade closed n=0  []
+
+==== NZDUSD (NZDUSD_1m.csv, 141280 tick) ====
+eval ok=128844  pasar-tutup=0  berita=10640  blocked=0  prog≥persist=0  fired=0  progMax=0s  (persist 20s)
+  perbandingan vs ambang (persentil 50/90/99):
+   ATR/biaya   0.90 / 1.39 / 2.15   butuh ≥3.5
+   ER          0.21 / 0.53 / 0.75   butuh ≥0.32
+   |skor|      0.28 / 0.63 / 0.87   butuh ≥0.48
+   ATR pips    3.6 / 5.6 / 8.6   (biaya 4.0 pips)
+  gerbang yang PALING sering menolak (dari 128844 eval dalam sesi):
+   ATR/biaya           128424   99.7%  lolos=    420
+   Skor                101108   78.5%  lolos=  27736
+   ER (choppy)          87540   67.9%  lolos=  41304
+   Brk ceil             64737   50.2%  lolos=  64107
+   SL swing valid       58249   45.2%  lolos=  70595
+   Mom&trend searah     53444   41.5%  lolos=  75400
+   Mom&trend cukup      37201   28.9%  lolos=  91643
+   retrace              26288   20.4%  lolos= 102556
+   HTF tidak lawan       6385    5.0%  lolos= 122459
+   Brk floor             1148    0.9%  lolos= 127696
+   z jangan kejar        1026    0.8%  lolos= 127818
+  lolos SEMUA gerbang sekaligus: 0 eval (0.000%)
+  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya 3.5×:
+   biaya  4.0 pips →     420 eval (  0.33%)   ← typSpread pair ini sekarang
+   biaya  3.0 pips →     720 eval (  0.56%)
+   biaya  2.5 pips →    1200 eval (  0.93%)
+   biaya  2.0 pips →    5100 eval (  3.96%)
+   biaya  1.5 pips →   16340 eval ( 12.68%)
+   biaya  1.0 pips →   68280 eval ( 52.99%)
+   biaya  0.7 pips →  115220 eval ( 89.43%)
+  ablation (buang satu gerbang, berapa eval lolos sisanya):
+   -ATR/biaya               188
+   -Skor                     91
+   -ER (choppy)               0
+   -Mom&trend searah          0
+   -Mom&trend cukup           0
+   -HTF tidak lawan           0
+   -Brk floor                 0
+   -Brk ceil                  0
+   -z jangan kejar            0
+   -retrace                   0
+   -SL swing valid            0
+   -spread                    0
+   -spike volatilitas         0
+  trade closed n=0  []
+
+exit=0

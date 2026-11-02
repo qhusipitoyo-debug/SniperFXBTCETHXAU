@@ -48,6 +48,38 @@ Satu koneksi broker melayani ketujuh pair; browser memfilter sesuai pair terpili
 Token broker hanya ada di `.env`, tidak masuk browser. Proxy listen di `127.0.0.1` dan hanya menerima origin di `ALLOW_ORIGINS`.
 Kalau web app di-host online, proxy lokal tidak terjangkau — deploy proxy sendiri dengan `wss://` dan buka `?proxy=wss://domain-proxy`.
 
+## Membaca kartu ENTRY — apa yang harus dilakukan di MT5
+
+Panel ini **tidak mengirim order** (auto-order MT5 dilepas di commit `4d76c66`; `dryRun=true`, `autoArm=false`).
+Kartu adalah rencana kerja; kamu mengeksekusinya sendiri di terminal.
+
+Setiap kartu punya blok angka yang sama di tiga keadaan:
+
+| Field | Artinya |
+|---|---|
+| `ENTRY` | harga pasar yang jadi patokan rencana. `≈` = masih preview (countdown), tanpa `≈` = sudah terkunci 100% |
+| `SL` | harga stop-loss, diikuti jaraknya dalam pips — inilah ukuran risiko sebenarnya |
+| `TP1` | +1R: tutup 50% posisi di sini |
+| `TP2` | +2.2R: sisa 50% dibiarkan lari ke sini |
+| `LOT` | volume yang sudah dihitung dari `balance` × `riskPct` ÷ jarak SL. Isi kolom "Volume" MT5 dengan angka ini, bukan perkiraan |
+| `RISK` | rugi dolar kalau SL tersentuh sebelum apa pun ditutup. Kalau lebih besar dari risiko yang kamu rela, turunkan `LOT` |
+| `HASIL` | (kartu selesai saja) bagaimana rencana tadi berakhir: `🔴 SL` / `⚪ BE` / `🏆 TP2` / `⏱ TIME` + R-nya |
+
+Langkah manualnya setelah satu kartu jadi `🎯 PLAN SIAP (ENTRY)`:
+
+1. Buka simbol yang tertulis di judul kartu (EURUSD, XAUUSD, BTCUSDp…) — bukan yang lain.
+2. Klik Market **Buy** atau **Sell** sesuai panah arah kartu.
+3. Isi **Volume = LOT** di kartu. Jangan ubah dulu; SL-lah yang menentukan risiko.
+4. Isi **Stop Loss = SL**. Jangan tinggalkan posisi tanpa SL; panel tidak akan menutupnya untukmu.
+5. **Take Profit boleh dikosongkan** — rencananya manual: tutup separuh di TP1, lalu geser SL ke harga entry
+   begitu posisi untung `+0.4R` (sisa separuh dibiarkan ke TP2). Kalau tidak sempat memantau, pasang TP di TP1
+   dan terima bahwa kamu melewatkan ekor TP2.
+6. Entry di luar kartu tidak dihitung. Angka `ENTRY` punya masa berlaku (`PLAN_TTL` 60 menit); kalau harga sudah
+   menjauh dan kamu mengejar, kamu membayar harga yang tidak lagi sepadan dengan SL yang tertera.
+
+Kartu `SETUP` dengan `≈ PREVIEW` **jangan dieksekusi**. Angkanya dihitung dari bar terakhir dan boleh berubah
+sampai countdown 100%; kalau salah satu gerbang gagal di tengah jalan, rencana itu hilang tanpa pernah valid.
+
 ## Kalibrasi (WAJIB sebelum percaya sinyal)
 
 Parameter di `engine.js` (`MODES`, `PARAMS`, `typSpread`, `sess`) adalah **titik awal yang masuk akal, bukan hasil optimasi**.
@@ -212,6 +244,112 @@ tetap `true`, `autoArm` tetap `false`. Regresi: `bridge_test` 91, `scanner_test`
 `ui_smoke` 0 error, `ea_sim` 11 langkah. Live: bridge 8790 di-restart dengan feed menempel —
 `priceSource=mt5` (terminal hidup) dan `feed.ready=true` di latar; uji terminal-mati dilakukan di folder
 kosong (`/tmp/sniper-nomt5`) dan scanner tetap memindai BTCUSD/ETHUSD sampai stage WATCH.
+
+**2-11-2026 — kalibrasi jam v6 diuji keluar-sampel: dia tidak bertahan, dan penyebabnya lebih besar dari dirinya sendiri.** Sesi sebelumnya memasang `PAIRS[].hours` + `calib.modeFloor` di `engine.js` dengan klaim "live-gate XAU bal PF 1.18→1.72, BTC −0,033→+0,063 PF 1,63". Angka itu nyata tapi dihitung di jendela yang sama dengan tempat jamnya dipilih: "buang jam dengan avgR jelek" selalu terlihat menaikkan PF di data itu sendiri, terlepas jamnya memang jelek atau hanya noise. `tools/_hour_oos.js` memutus lingkarannya — jam dipilih **hanya** di TRAIN (aturan sama: n≥6, avgR≥+0,02), lalu dua engine-run terpisah lewat **live-gate** (bukan post-filter, supaya cooldown/latch ikut terpakai) dan dinilai **hanya** di TEST. Jalankan dua split supaya tidak kebetulan: `node tools/_hour_oos.js XAUUSD BTCUSD ETHUSD` (split 0,6) dan `node tools/_hour_oos.js XAUUSD BTCUSD --split=0.5`.
+
+| BTCUSD, 365 hari, mode balanced | n | avgR | PF |
+|---|---|---|---|
+| in-sample penuh, semua jam (angka yang selama ini dikutip) | 393 | −0,033 | 0,79 |
+| **TEST 146 hari** — baseline semua jam | 144 | −0,040 | 0,77 |
+| **TEST 146 hari** — allowlist dipilih dari TRAIN `[2,9,15,16,17,18,19,23]` | 52 | **−0,102** | 0,45 |
+| TEST 146 hari — allowlist *shipped* `[8,9,19,23]` (dipilih in-sample) | 29 | +0,049 | 1,51 |
+| **TEST 183 hari (split 0,5)** — baseline semua jam | 183 | −0,041 | 0,76 |
+| **TEST 183 hari** — allowlist dari TRAIN `[2,9,15,16,18,19,23]` | 56 | **−0,089** | 0,47 |
+| TEST 183 hari — allowlist *shipped* | 35 | +0,037 | 1,38 |
+
+- **Pemotongan jam yang dilakukan dengan jujur justru memperburuk TEST**, di dua split, dengan sampel yang layak (144→52 dan 183→56 trade): −0,040 → −0,102 dan −0,041 → −0,089 R/trade. Jam yang "bagus di TRAIN" tidak membawa informasinya ke depan.
+- **Baris *shipped* yang kelihatan +0,049/+0,037 itu bukan bukti — itu kebocoran.** Allowlist `[8,9,19,23]` dipilih memakai seluruh tahun termasuk jendela TEST; diuji ulang di TEST dia tentu saja bagus. Beda 0,09 R antara "jam dipilih pakai TEST" dan "jam dipilih tanpa TEST" adalah ukuran langsung dari efek kalibrasi in-sample, dan itu alasan angka PF 1,63 kemarin tidak boleh dibaca sebagai perbaikan.
+- **XAUUSD: tidak memburuk, tapi juga tidak terangkat — dan edge-nya sendiri ternyata hanya punya TRAIN.** Split 0,6: baseline TEST n=28 avgR **+0,006** PF 1,03, allowlist TRAIN `[7,8,10]` n=7 avgR −0,003 PF 0,99. Split 0,5: baseline TEST n=32 avgR **−0,022** PF 0,90, allowlist TRAIN n=8 avgR −0,009 PF 0,95. Pembandingnya yang penting: seluruh tahun `n=76 avgR +0,064 PF 1,44` sedangkan 146/183 hari terakhir ≈ nol — jadi "+0,064R/trade" emas itu tinggal di 219 hari pertama (TRAIN ≈ +0,097R), bukan di masa kini. (Baseline OOS di sini sudah memakai `modeFloor` v6, jadi n=76 bukan n=124 pra-kalibrasi; perbandingan yang dimaksud adalah baris A vs baris B, bukan vs angka lama.)
+- **ETHUSD tidak bisa diputuskan sama sekali**: 45 hari, tidak ada satu jam pun dengan n≥6 di TRAIN, TEST `n=8`. `hours=[0,2,4,10,11,12,17,19]` yang sekarang dipasang di engine untuk ETH tidak punya dasar apa pun selain noise.
+- Konsekuensi yang **sudah** dijalankan sesudahnya: `calib.modeFloor` diuji dengan harness yang sama (`tools/_floor_oos.js`; floor diisolasi dengan `hours=null`, kandidat = tanpa floor / shipped / ±1 langkah, pemenang dipilih di TRAIN dengan syarat n≥20 lalu dinilai di TEST).
+
+| pair | TRAIN: tanpa floor → pemenang | TEST: tanpa floor | TEST: floor terpilih TRAIN | TEST: floor shipped |
+|---|---|---|---|---|
+| XAUUSD 365h | n=59 avgR +0,109 PF 1,99 → menang **lebih ketat** `.52/.34/4,0` (n=39, +0,142 PF 2,25) | n=36 avgR −0,010 PF 0,95 | **n=17 avgR −0,050 PF 0,76** | n=28 avgR +0,006 PF 1,03 |
+| ETHUSD 45h | n=26 avgR −0,049 PF 0,64 → menang **lebih longgar** `.50/.33/3,8` (n=21, −0,020) | n=13 avgR +0,066 PF 1,87 | n=12 avgR +0,092 PF 2,33 | **n=8 avgR −0,009 PF 0,92** |
+| EURUSD 35h (Deriv) | tanpa floor n=1; semua kandidat floor **n=0** | n=0 | — | n=0 |
+
+- **Pola yang sama persis dengan jam:** floor yang menang di TRAIN membuat TEST memburuk (XAU −0,010 → −0,050 R/trade, PF 0,95 → 0,76, dan 36 trade jadi 17). Tidak ada satu pun pair yang punya tenaga statistik untuk klaim "perbaikan" (syarat n≥20 di TEST tidak terpenuhi), tapi yang terbukti tanpa ambiguitas: **modeFloor tidak menambah sampel maupun edge — dia memotongnya.**
+- **Prosedur jujur bahkan tidak memilih floor yang sekarang terpasang.** Untuk XAU ia memilih lebih ketat, untuk ETH ia memilih lebih longgar (= persis default `balanced`), dan untuk EUR ia tidak memilih apa pun karena nol kandidat lolos n. Baris "TEST floor shipped" yang kelihatan bagus di XAU (+0,006 vs −0,010) adalah angka dengan kebocoran yang sama seperti baris *shipped* di tabel jam.
+- Implikasi praktis yang diterima apa adanya: `calib.modeFloor` XAU/ETH/EUR **tidak dihapus** (keputusan operator: dipertahankan sebagai pembatas risiko berlabel, bukan kalibrasi), tapi klaim "naik PF" di komentar `engine.js` sudah dikoreksi menjadi in-sample, dan panel statistik tidak boleh lagi dibaca sebagai bukti bahwa lantai itu bekerja.
+
+
+**Dan untuk tujuh major FX, pertanyaannya ditutup lebih cepat: tidak ada trade yang bisa dibagi per jam.** `tools/_fx_hour_calib.js` (output `/tmp/fx_hour_calib.txt`) melaporkan n=0–4 per pair; `tools/_fx_funnel.js` mencari gerbang mana yang membunuhnya, dengan `hours` dan `sess` dilepas supaya jam bukan tersangkanya. Jawabannya satu gerbang: **`ATR/biaya ≥ 3,5×`** menolak 89,8–100,0% dari seluruh evaluasi dalam sesi.
+
+| Major (35 hari Deriv, balanced) | ATR/biaya p50/p90/p99 (butuh ≥3,5) | eval ditolak biaya | eval lolos SEMUA gerbang | fire → trade |
+|---|---|---|---|---|
+| GBPUSD | 1,28 / 2,16 / **3,08** | 99,8% (300/128 832) | **0** | 0 → 0 |
+| USDCHF | 0,99 / 1,70 / 2,72 | 100,0% (31 lolos) | **0** | 0 → 0 |
+| AUDUSD | 0,82 / 1,31 / 2,04 | **100,0% (0 lolos)** | **0** | 0 → 0 |
+| USDCAD | 1,02 / 1,80 / 2,68 | **100,0% (0 lolos)** | **0** | 0 → 0 |
+| NZDUSD | 0,90 / 1,39 / 2,15 | 99,7% (420 lolos) | **0** | 0 → 0 |
+| USDJPY | 2,04 / 3,52 / 5,17 | 89,8% | 91 (0,071%) | 4 → 4 |
+| EURUSD (Deriv) | 1,79 / 3,23 / 4,77 | 93,5% | 17 (0,013%) | 0 → 0 |
+
+- **Ambang biaya untuk major FX berada DI ATAS persentil-99 distribusi rasionya sendiri.** Butuh ATR 15-menit ≥ 15,8 pips di GBP (biaya 4,5 pips); yang terjadi 5,8 pips di median, 13,9 di p99. Ini bukan "jam yang salah" — di jam mana pun gerbangnya tidak terbuka, dan `tools/_fx_mincost_sweep.js` mengonfirmasi bahwa melonggarkannya tidak menyembunyikan edge: pada `minCost=0,8` (gerbang biaya praktis mati) GBP `n=10 avgR −0,118 PF 0,28`, CHF `n=11 PF 0,28`, JPY `n=12 PF 0,12`, NZD `n=8 PF 0,59`, EUR `n=18 avgR −0,173 PF 0,29`, AUD/CAD `n=3`. **Sesuai larangan yang sudah ditulis di atas ("ambang biaya tidak boleh diturunkan untuk mencari sesuatu") — sekarang larangan itu punya angka: yang keluar dari pelonggaran adalah rugi, bukan peluang yang tertahan.**
+- Ablasi satu gerbang (berapa eval lolos sisanya): GBP 0→166, CHF 0→167, AUD 0→94, CAD 0→122, NZD 0→188, EUR 17→233 kalau `ATR/biaya` dibuang; `Brk ceil` runner-up yang nyata di EUR (17→953) dan JPY (91→575). Sisanya (`Skor`, `ER`, `mom/trend`, `HTF`, `z`, `retrace`, `SL`, `spread`, `spike`) tidak pernah jadi satu-satunya penghalang di major mana pun.
+- Sisi arahnya diuji terpisah, tanpa SL/TP/BE (`tools/signal_test.js --horizon 15 --stride 15`, 2 320 sampel tak-tumpang-tindih per pair): GBP edge −0,022 ATR p=0,184, JPY −0,002 p=0,908, AUD **−0,042 p=0,012** — yang terakhir terbedakan dari nol dan **salah sisi** (anti-sinyal), persis pola yang membuat walk-forward menghukum "strategi short emas". Kontrol alat (nabi ✔ p=0,000 / koin ✘) lulus, jadi ✘ di atas bisa dipercaya. Drag-nya −0,54…−1,25 ATR.
+- **Satu temuan data yang mengubah cara baca statistik EURUSD.** `data/EURUSDT_1m.csv` (proxy Binance) menyimpang 44 pips (median) sampai 515 pips dari median-nya sendiri dan melompat >15 pips sebanyak **985 kali** dalam 45 hari (terbesar 309 pips: 1,16095 → 1,13005 dalam 15 detik, 2026-10-30 09:06). Tiga-satu-satunya trade "profit" EUR (PF 27,33 di `pair_stats`/sweep) semuanya lahir 29–30 Oktober, di sekitar artefak itu. Setelah `tools/fetch_deriv.js EURUSD` (frxEURUSD, 35 343 bar, 2026-09-28→2026-11-02) dipasang sebagai sumber korpus, hasil EURUSD menjadi `lolos semua gerbang 17 eval, fire 0, trade 0` — **sama seperti lima major lainnya**. Catatan pentingnya dua arah: laju lolos gerbang biaya hampir tidak berubah (6,72% Binance vs 6,53% Deriv), jadi yang artefak adalah *trade*-nya, bukan *agen* penolaknya; penyebabnya tetap spread 2,8 pips vs ATR 5,0 pips. `tools/_fx_funnel.js` sekarang memprioritaskan `data/<PAIR>_1m.csv` di atas simbol Binance supaya perbandingan antar-major memakai sumber yang sama.
+- Artinya `hours=[7,8,9,…]` yang dipasang kemarin untuk tujuh major FX **bukan hasil kalibrasi** — tidak ada satu pun trade untuk mengkalibrasinya. Status jujur yang sekarang tertulis di komentar `engine.js`: prior likuiditas (sesi London/NY), sementara allowlist XAU/BTC/ETH berstatus *tidak terverifikasi keluar-sampel*. Tidak ada ambang yang diturunkan, tidak ada yang di-arm; `dryRun=true`, `autoArm=false`. Regresi tetap hijau dengan `inSession`/`sessionLabel` v6 di tempat: `scanner_test` 70, `bridge_test` 92, `ui_smoke` exit 0, dan panel per-jam menampilkan apa adanya — `BAGUS 1 MARGINAL 1 JELEK 1 tipis 3 kosong 18`.
+
+**2-11-2026 — kalibrasi silang ke `pitoyict13-droid/aiterminaltrading` (buy/sell + TP/SL): tidak ada satu pun angka mereka yang layak dipindah.** Permintaannya "kalibrasikan dengan laman itu". Yang dilakukan bukan menyalin angkanya, tapi menguji angkanya di harness yang sama seperti log di atas. Dua alat baru: `tools/_ait_geom.js` (geometri TP/SL) dan `tools/_ait_dir.js` (aturan arah buy/sell).
+
+- **Repo rujukannya sendiri tidak konsisten, dan itu menentukan apa yang bisa dikalibrasi.** Ada tiga geometri berbeda di satu repo: (a) executor Python `mt5_grid_hft.py` → SL 15 p / TP 30 p (RR 1:2), BE di +1R dengan buffer spread+2 pips, tanpa parsial, tanpa time-stop, `--max-spread-pips 1.5`; (b) kartu BUY/SELL di `index.html` → SL 30 p / TP 60 p untuk major non-JPY, emas 0,5%/1,0%, BTC 1,0%/2,0%, ETH 1,5%/3,0%, straddle dua arah + OCO; (c) `pineSnR.txt` → SL = `slLv` × grid, TP = `tpLv` × grid dengan default **SL 3 grid / TP 1 grid = RR 0,33** dan grid = 0,25 × ATR(D1). "Angka dari laman itu" tidak tunggal, jadi semuanya diuji, tidak ada yang dipilih karena cocok.
+- **Geometri, TEST (entry engine dipegang tetap, tiap exit dijalankan ulang di tick yang sama — perbandingan berpasangan).** `node tools/_ait_geom.js XAUUSD BTCUSD ETHUSD EURUSD`. Δ = selisih R per trade vs exit kita sendiri, ±SE:
+
+  | geometri | XAU n=36 | Δ±SE | BTC n=144 | Δ±SE |
+  |---|---|---|---|---|
+  | kita (TP 1R/2,2R parsial, BE 0,4R, TTL 60m) | −0,014 | — | −0,040 | — |
+  | ait SL 15p/TP 30p | **−0,921** | **−0,907±0,226** | **−1,862** | **−1,822±0,216** |
+  | ait emas 0,5%/1,0% | −0,098 | −0,084±0,218 | — | — |
+  | ait straddle 0,375%/0,75% | −0,040 | −0,026±0,208 | — | — |
+  | ait BTC 1,0%/2,0% | — | — | −0,091 | −0,051±0,096 |
+  | pine grid 0,25×ATR(D1), SL 1 / TP 2 | −0,107 | −0,093±0,194 | −0,025 | +0,015±0,100 |
+  | pine C1–C3 default, SL 3 / TP 1 (RR 0,33) | −0,086 (wr 69%) | −0,072±0,097 | −0,014 (wr 75%) | +0,026±0,055 |
+  | pine C4/C5, SL 2 / TP 1 (RR 0,5) | −0,009 (wr 67%) | +0,005±0,105 | −0,024 | +0,017±0,064 |
+  | kontrol: kita tanpa TTL & tanpa parsial | +0,043 | +0,057±0,187 | −0,015 | +0,025±0,080 |
+
+  Bacanya: **tidak satu pun geometri mereka mengangkat TEST di luar noise** (semua |Δ| < 2 SE kecuali yang pip-tetap), dan yang pip-tetap itu **jatuh bukan karena arahnya salah tapi karena biayanya** — kolom `biaya` di keluaran alat menampilkan spread ÷ jarak SL: 0,303 R/trade di emas dan 1,333 R/trade di BTC untuk SL 15 pips. Di broker ini — pakai asumsi ritel `typSpread` 4,5 pips emas dan 2,8–4,5 pips major, **bukan hasil pengukuran; lihat koreksi di entri berikutnya** — syarat `--max-spread-pips 1,5` mereka tidak akan pernah lolos, jadi SL 15 pips bukan "setup yang kurang sukses", ia setup yang tidak bisa dibuka. Winrate 69–75% pada preset pine C1–C3 dengan avgR negatif adalah contoh paling mahal dari halaman itu: RR 0,33 membuat sinyal yang benar pun habis, dan kartu BUY/SELL yang sering hijau tetap menghasilkan −3,09 R (emas) / −2,00 R (BTC) di TEST. Cek validasi replikasi (Δ replay-vs-engine 0,0035 R, sisa pembulatan `rd()` engine) ada di keluaran alat.
+- **Arah buy/sell, aturan grid mereka ditulis ulang dari deskripsi (repo tidak berlisensi — `license: null` — jadi tidak ada satu baris pun yang disalin).** `node tools/_ait_dir.js EURUSD GBPUSD USDJPY --boot=1500` dan `node tools/_ait_dir.js XAUUSD --grid-pips=150 --boot=1500`. Ujung sel 15 p → long, turun → short, tertahan ≥2 scan, EMA(M1) searah, 07–19, blackout berita. Edge 15 menit, dinormakan ATR(M15), detrend, stationary block bootstrap:
+
+  | | TRAIN | TEST | bersih setelah drag spread (TEST) |
+  |---|---|---|---|
+  | EURUSD grid | −0,027 (p 0,67) | −0,046 (p 0,62) | −0,549 ATR |
+  | GBPUSD grid | −0,045 (p 0,43) | −0,008 (p 0,92) | −0,707 ATR |
+  | USDJPY grid | +0,024 (p 0,68) | −0,071 (p 0,22) | −0,515 ATR |
+  | XAUUSD grid 150p | +0,014 (p 0,43) | +0,029 (p 0,21) | −0,053 ATR |
+  | engine ini, arah mentah tanpa gerbang (XAU) | −0,001 (p 0,80) | −0,020 (p 0,02) | −0,225 ATR |
+
+  Tidak ada yang terbedakan dari nol kecuali satu hal yang justru tidak menguntungkan kita: arah mentah engine di TEST emas **negatif ringan** (−0,020 ATR, p 0,023) — itu angka `side` dari setiap `evaluate()`, termasuk kedip stage WATCH, bukan trade yang lolos gerbang, dan besarnya 1/10 dari drag spread; praktis tidak berarti, tapi tercatat supaya tidak diklaim sebagai "edge" nanti. Catatan metodologi penting: pada grid 15 pips (bukan 150) set TEST emas sempat tampak +0,052 ATR p 0,004 di bucket "grid berlawanan dengan engine"; angka itu **hilang** (p 0,21) begitu grid diubah ke ukuran yang sesungguhnya dipakai preset mereka — contoh kenapa parameter geometri harus diuji pada skala aslinya, bukan pada skala yang menghasilkan p kecil.
+- **Yang tidak bisa dikalibrasi, dan kenapa tidak dicoba-paksa.** (1) Aturan arah emas mereka (`xauusd-signal-rules.js`) butuh *history actual-vs-forecast* makro; yang kita punya cuma `data/calendar.json` minggu berjalan → tidak bisa di-backtest, dan menaruhnya sebagai filter live berarti memasang aturan yang belum pernah diukur. (2) Pelebaran grid/SL/TP ×1,5 selama 60 menit pasca event impact≥3 dan aturan Jumat 16:00 tidak punya padanan di data 35–45 hari kita (terlalu sedikit event untuk menilai dua parameter sekaligus). (3) Laman itu menerbitkan API key Twelve Data di HTML publiknya — tidak dipakai, tidak disalin, tidak masuk ke proyek ini.
+- **Keputusan: `engine.js` tidak berubah.** Tidak ada SL/TP/BE/ambang baru, tidak ada ambang yang diturunkan, `dryRun=true`, `autoArm=false`. Yang dipertahankan sebagai ide (bukan angka): blackout berita dua arah (sudah ada sebagai `PARAMS.NEWS_BLACKOUT`), jendela sesi, dan prinsip "biaya menentukan segalanya" — yang log ini tambahi bukti baru: di broker ritel, SL 15 pips adalah **rugi terukur 0,3–1,3 R per trade sebelum arah benar atau salah**. Kalau suatu saat pindah ke ECN 0,0–0,2 pip, tabel geometri di atas layak dijalankan ulang — di situlah pertanyaan "SL 15 atau 3,2×ATR?" baru bisa dijawab, bukan hari ini.
+
+**2-11-2026 — papan localhost kosong: satu bug tampilan diperbaiki, satu gerbang dibuka karena belum terverifikasi, dan satu asumsi biaya ternyata BUKAN pengukuran.** Yang dilaporkan: "di localhost tidak ada pair yang lolos ENTRY+SETUP". Pemeriksaan dengan `tools/_live_diag.js` (probe WS Deriv yang sama seperti `app.js`, mencetak gerbang yang gagal per pair, tidak mengubah apa pun) menunjukkan alatnya hidup — 10/10 quote segar, stage WATCH dengan skor nyata. Jadi ini bukan kerusakan, ini gerbang. Yang rusak adalah **papan tidak menjelaskan dirinya sendiri**.
+
+- **Koreksi penting atas log-log sebelumnya: spread di `data/*.csv` tidak pernah mengukur apa pun.** `tools/fetch_deriv.js:62` menulis `bid/ask = mid ± typSpread*pip/2`; `fetch_klines.js` melakukan hal yang sama untuk proxy Binance. Jadi setiap angka "spread terukur 2,8–4,6 pips" yang dipakai di halaman ini (termasuk kalimat dua bullet di atas: `0,303 R/trade emas`) adalah **typSpread yang dipantulkan balik**, dan klaim di `engine.js` bahwa angka itu "diukur dari sniper_status.txt" tidak bisa dibuktikan dari korpus. `tools/_spread_measure.js` mendeteksinya otomatis (jumlah nilai spread berbeda ≤ 3 → label SINTETIS) dan itu kini tercetak di keluarannya. Konsekuensinya konkret: uji geometri TP/SL di entri sebelumnya tetap sah — yang dipakai di sana adalah jarak SL dan ATR — tapi angka "biaya 0,303 R/trade emas / 1,333 R/trade BTC" di bacanya harus dibaca sebagai *akibat asumsi ritel yang kita pasang sendiri*, bukan sebagai temuan dari data.
+- **Keputusan "UKUR DULU" sudah dikerjakan, dan angkanya datang dari akun yang benar (terminal hidup, `sniper_status.txt` disampling 181 baris / 180 detik, 08:0x UTC):**
+
+  | pair | spread AKUN median | p90 | max | `typSpread` | akun ÷ typ |
+  |---|---|---|---|---|---|
+  | EURUSD | 0,90 p | 1,00 | 1,10 | 2,80 | **0,32×** |
+  | USDJPY | 0,90 p | 1,00 | 1,10 | 4,00 | **0,23×** |
+  | GBPUSD | 1,10 p | 1,10 | 1,20 | 4,50 | **0,24×** |
+  | USDCHF | 0,90 p | 1,00 | 1,10 | 4,50 | **0,20×** |
+  | AUDUSD | 1,10 p | 1,10 | 1,10 | 4,50 | **0,24×** |
+  | USDCAD | 1,10 p | 1,10 | 1,20 | 4,50 | **0,24×** |
+  | NZDUSD | 1,20 p | 1,20 | 1,20 | 4,00 | **0,30×** |
+  | XAUUSD | 2,50 p | 3,10 | 3,70 | 4,50 | 0,56× |
+  | BTCUSD | 19,65 p | 19,65 | 19,65 | 20,00 | 0,98× |
+  | ETHUSD | 19,30 p | 19,30 | 19,80 | 20,00 | 0,97× |
+
+  Untuk tujuh major, **biaya yang mesin bebankan 3–5× lebih besar dari biaya akun sebenarnya**; emas 1,8×; crypto 1,0× (di sana asumsinya memang benar). Efeknya langsung ke gerbang yang menahan papan: `ATR/biaya ≥ 3,5–4,0×` menuntut ATR(M15) 11,2–16,1 pips per major, sedangkan pada biaya akun terukur tuntutannya 3,2–4,2 pips — dan ATR nyata yang tercabut dari `--live` tadi adalah 3,4–8,6 pips. Artinya **sebagian besar penolakan "ATR/biaya" di papan adalah penolakan terhadap asumsi biaya kita sendiri, bukan terhadap pasar.** `typSpread` TETAP tidak diubah (keputusan: ukur dulu, belum dipasang) dengan tiga alasan yang tercatat: satu jendela 180 detik bukan distribusi (rollover dan berita melebar), `costPips()` sudah memakai `max(feed, typSpread)` sehingga feed Deriv 0,7–1,3 p tidak ikut melindungi, dan menurunkan biaya tanpa mengulang uji `ATR/biaya` di korpus = memindahkan ambang karena angkanya mengganggu — persis pola pikir yang sudah dihukum walk-forward di halaman-halaman sebelumnya. Yang layak dikerjakan berikutnya, kalau angka ini mau dipakai: jalankan ulang `_fx_funnel.js`/`_hour_oos.js` dengan `typSpread` akun terukur, lalu bandingkan TEST-nya.
+- **Temuan samping yang perlu keputusan operator: terminal yang terhubung bukan demo.** `sniper_status.txt` melaporkan `server=FBS-Real`, `trade_mode=real`, dan `--akun` tool ini mencetak peringatan keras di baris itu (`⚠ trade_mode bukan demo`). Sementara seluruh komentar di `engine.js`/README menyebut "FBS-Demo". Yang menahan hari ini hanya `bridge/config.json` (`dryRun=true`, `autoArm=false`) — tidak ada order yang bisa keluar, dan tidak ada yang diubah di blok ini. Tapi satu asumsi keamanan halaman ini ("akun demo") ternyata tidak benar, dan itu dicatat di sini supaya tidak ketahuan dari log akun, bukan dari perkiraan.
+- **Keputusan operator untuk prior jam v6: JADI LABEL, JANGAN BLOKIR.** `hours[]` tetap tersimpan di `PAIRS[]` tapi `inSession()` tidak lagi membaca daftar itu — gerbang sesi kembali ke `sess[0]..sess[1)` (+`SESS_EDGE_MS`) dan `h24` untuk crypto; `sessionLabel()` kini menampilkan keduanya ("7:00–16:00 UTC · prior jam 7,8,10,11,13,15 (label, tidak memblokir)") dan `evaluate()` menambah field non-blocking `out.priorOut`. Ini **membalik perilaku gating ke keadaan v5**, dan dasarnya persis seperti yang sudah dicatat dua entri di atas: allowlist dipilih in-sample, keluar-sampel justru memburuk (BTC −0,040→−0,102 R/trade), dan untuk tujuh major tidak ada satu trade pun yang mengkalibrasinya karena gerbang biaya sudah menolak 89,8–100,0% evaluasi. Yang menahan entry sekarang: blackout berita, pasar tutup, jendela sesi, dan seluruh gerbang mutu — jam tidak lagi. Efek yang harus diterima: **BTC/ETH bisa fire jam berapa pun** (sebelumnya hanya 4 jam pilih-pilih), dan `tools/_fx_funnel.js`, `_hour_oos.js`, `_floor_oos.js`, `_ait_geom.js`, `_ait_dir.js` yang selama ini men-`null`-kan `hours` untuk isolasi kini melakukan no-op — tidak ada yang perlu diubah di alat-alat itu, hanya tidak lagi menguji hal yang berbeda.
+- **Yang benar-benar diperbaiki: papan kosong sekarang menjelaskan dirinya sendiri.** Board kosong tadinya hanya satu kalimat ("Belum ada ENTRY/SETUP. Scanner memantau …") — persis sama antara "mesin menolak semua" dan "alatnya rusak", sehingga tidak ada cara membedakan keduanya tanpa membuka terminal. Sekarang: satu baris per pair, **diurut dari yang paling dekat ke TERKUNCI**, berisi sisi, skor, **% countdown latch**, dan **gerbang pertama yang menahan**, plus tiga angka telanjang (ATR/biaya vs lantai, ER vs lantai, spread/biaya) dan label prior jam. Tidak ada ambang yang disentuh: `minScore`/`minER`/`minCost`/`typSpread` dibiarkan persis seperti sebelum entri ini, `dryRun=true`, `autoArm=false`.
+- **Vonis gerbangnya, dari `--live` 08:01 UTC, supaya jelas apa yang harus berubah sebelum ada kartu:** 0/10 pair bahkan punya countdown berjalan. Tujuh major gagal di **satu** gerbang: `ATR/biaya` 0,8–2,2× vs lantai 3,5–4,0× dengan ATR(M15) nyata 3,4–8,6 pips (butuh 9,8–16,1 pips). XAU lolos biaya (6,5–11×) tapi ER 0,01–0,07 vs lantai 0,33 dan |skor| 0,01–0,12 vs 0,50 — pasar tanpa arah, bukan mesin yang macet. BTC skor 0,16–0,34 vs 0,48 + momentum/trend tidak searah. CAD di luar jendelanya (12–20 UTC). Artefak kalibrasi mentah: `tools/_spread_measure.js`, keluaran lengkap di `docs/calib/spread_measure.txt`.
+- **Test suite sesudah perubahan:** `tools/scanner_test.js` 70 lulus/0 gagal, `tools/bridge_test.js` 92/0 (R2-nya membaca `E.inSession`/`E.sessionLabel` jadi ikut berubah otomatis; EURUSD 22:30 UTC tetap ditolak — lewat `sess`, bukan lewat `hours`), `tools/ui_smoke.js` exit 0 dan papan kosong tampil dengan tabel baru.
+- **2-11-2026, keputusan operator: FBS tidak jadi di-bridge — spread-nya tidak cocok.** Konsekuensinya harus dibaca jujur, karena ini membuka kembali asumsi yang tadi dikira tertutup: tidak ada satu pun broker yang biayanya terukur di proyek ini. Tabel `sniper_status.txt` di atas tetap menjadi **cuplikan historis satu jendela 180 detik dari akun yang tidak lagi dipakai jalur**, bukan biaya dasar; `typSpread` di `PAIRS[]` satu-satunya angka biaya yang dibaca mesin, dan ia tidak bersumber dari terminal mana pun lagi. Efeknya berlapis: (1) `costPips()` = `max(spread feed, typSpread)` + `COST_EXTRA_PIPS`, jadi seluruh papan disaring terhadap asumsi — penolakan `ATR/biaya` hari ini adalah penolakan terhadap angka kita sendiri, seperti yang sudah dicatat bullet sebelumnya, dan itu tidak berubah oleh keputusan ini; (2) kartu ENTRY yang muncul menghitung `LOT`/`RISK` dari jarak SL yang sah di asumsi itu, jadi **kalau suatu saat dieksekusi di broker mana pun, volume harus dihitung ulang di sana**, bukan dipercaya begitu; (3) `tools/_spread_measure.js --akun` dan jalur `bridge/` menjadi mati bukan karena rusak, tapi karena tidak ada terminal yang mau diukur — sebelum `typSpread` diganti, yang perlu diulang adalah `_fx_funnel.js` + `_hour_oos.js` dengan angka baru, bukan penggantian angkanya saja. Sisi baiknya: pertanyaan "terminal ini FBS-Real, bukan demo" kehilangan artinya — tidak ada yang terhubung ke terminal, tidak ada jalur order, `dryRun=true`, `autoArm=false`, dan `autostart.sh` hari ini hanya menyalakan panel (tidak ada proses node yang hidup: bridge maupun collector tidak berjalan, jadi `stats/live_ledger.jsonl` tidak bertambah).
+
 
 
 

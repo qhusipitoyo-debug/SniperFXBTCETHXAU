@@ -1,0 +1,129 @@
+==== XAUUSD (PAXGUSDT_1m.csv, 2102412 tick, 365.0 hari) ====
+   spread data rata-rata = 4.46 pips (typSpread tabel 4.5) — executor mereka mensyaratkan --max-spread-pips 1.5, jadi di broker ini geometri pip-tetap mereka TIDAK akan pernah entry
+   entry engine (shipped): 95 trade  avgR 0.064  (TRAIN 59 / TEST 36)
+
+   kita: SL engine (max 3,2×ATR-M15/lantai biaya/swing) · TP 1R/2,2R parsial 50% · BE 0,4R · TTL 60m
+     TRAIN n= 59 wr= 54.2% avgR=  0.108 PF=1.98 tot=   6.36 biaya= 0.016R SL≈ 401p
+     TEST  n= 36 wr= 47.2% avgR= -0.014 PF=0.94 tot=  -0.50 biaya= 0.019R SL≈ 272p   keluar: TIME 89% BE 6% SL 3% TP2 3%
+     cek replikasi vs engine: ΔavgR TEST = 0.0035 (harus ≈ 0; sisa yang kecil itu pembulatan rd() engine ke desimal pair — level SL/TP engine dibulatkan, replay tidak)
+   ait: SL 15p / TP 30p (RR 1:2) · BE +1R+buf · tanpa parsial · tanpa TTL
+     TRAIN n= 59 wr= 32.2% avgR= -0.633 PF=0.47 tot= -37.37 biaya= 0.305R SL≈  15p
+     TEST  n= 36 wr= 27.8% avgR= -0.921 PF=0.22 tot= -33.17 biaya= 0.303R SL≈  15p   keluar: SL 69% BE 19% TP 11%
+     Δ vs exit kita (Trade/TEST): -0.741±0.228R / -0.907±0.226R   → |Δ| ≥ 2 SE: nyata pada n=36
+   ait(emas post-news): SL 0,50% / TP 1,00% · BE +1R+buf · tanpa TTL
+     TRAIN n= 59 wr= 37.3% avgR=  0.037 PF=1.07 tot=   2.18 biaya= 0.020R SL≈ 235p
+     TEST  n= 36 wr= 27.8% avgR= -0.098 PF=0.85 tot=  -3.54 biaya= 0.022R SL≈ 211p   keluar: SL 56% TP 28% BE 17%
+     Δ vs exit kita (Trade/TEST): -0.071±0.165R / -0.084±0.218R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+   ait(emas straddle pre-news): buffer 0,25% → SL 0,375% / TP 0,75%
+     TRAIN n= 59 wr= 32.2% avgR= -0.087 PF=0.84 tot=  -5.13 biaya= 0.026R SL≈ 176p
+     TEST  n= 36 wr= 33.3% avgR= -0.040 PF=0.93 tot=  -1.45 biaya= 0.029R SL≈ 158p   keluar: SL 53% TP 28% BE 19%
+     Δ vs exit kita (Trade/TEST): -0.195±0.131R / -0.026±0.208R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+   ait(pine): grid 0,25×ATR(D1) → SL 1 grid / TP 2 grid · BE +1R+buf
+     TRAIN n= 59 wr= 42.4% avgR=  0.133 PF=1.28 tot=   7.83 biaya= 0.020R SL≈ 269p
+     TEST  n= 36 wr= 27.8% avgR= -0.107 PF=0.82 tot=  -3.85 biaya= 0.026R SL≈ 182p   keluar: SL 56% TP 25% BE 19%
+     Δ vs exit kita (Trade/TEST): 0.025±0.161R / -0.093±0.194R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+   ait(pine C1–C3 default): SL 3 grid / TP 1 grid (RR 0,33) · BE +1R+buf
+     TRAIN n= 59 wr= 81.4% avgR=  0.078 PF=1.40 tot=   4.58 biaya= 0.007R SL≈ 808p
+     TEST  n= 36 wr= 69.4% avgR= -0.086 PF=0.73 tot=  -3.09 biaya= 0.009R SL≈ 547p   keluar: TP 69% SL 31%
+     Δ vs exit kita (Trade/TEST): -0.030±0.089R / -0.072±0.097R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+   ait(pine C4/C5): SL 2 grid / TP 1 grid (RR 0,5) · BE +1R+buf
+     TRAIN n= 59 wr= 78.0% avgR=  0.160 PF=1.69 tot=   9.42 biaya= 0.010R SL≈ 539p
+     TEST  n= 36 wr= 66.7% avgR= -0.009 PF=0.97 tot=  -0.33 biaya= 0.013R SL≈ 365p   keluar: TP 67% SL 33%
+     Δ vs exit kita (Trade/TEST): 0.052±0.096R / 0.005±0.105R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+   kita tanpa TTL & tanpa parsial: SL 3,2×ATR(M15) / TP 2,2R saja
+     TRAIN n= 59 wr= 18.6% avgR=  0.215 PF=2.10 tot=  12.69 biaya= 0.016R SL≈ 401p
+     TEST  n= 36 wr= 19.4% avgR=  0.043 PF=1.11 tot=   1.55 biaya= 0.019R SL≈ 272p   keluar: BE 47% SL 33% TP 19%
+     Δ vs exit kita (Trade/TEST): 0.107±0.117R / 0.057±0.187R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=36
+
+==== BTCUSD (BTCUSDT_1m.csv, 2102420 tick, 365.0 hari) ====
+   spread data rata-rata = 20.00 pips (typSpread tabel 20) — executor mereka mensyaratkan --max-spread-pips 1.5, jadi di broker ini geometri pip-tetap mereka TIDAK akan pernah entry
+   entry engine (shipped): 393 trade  avgR -0.033  (TRAIN 249 / TEST 144)
+
+   kita: SL engine (max 3,2×ATR-M15/lantai biaya/swing) · TP 1R/2,2R parsial 50% · BE 0,4R · TTL 60m
+     TRAIN n=249 wr= 38.6% avgR= -0.030 PF=0.80 tot=  -7.43 biaya= 0.027R SL≈ 964p
+     TEST  n=144 wr= 46.5% avgR= -0.040 PF=0.77 tot=  -5.78 biaya= 0.036R SL≈ 740p   keluar: TIME 91% BE 5% SL 3% TP2 1%
+     cek replikasi vs engine: ΔavgR TEST = 0.0004 (harus ≈ 0; sisa yang kecil itu pembulatan rd() engine ke desimal pair — level SL/TP engine dibulatkan, replay tidak)
+   ait: SL 15p / TP 30p (RR 1:2) · BE +1R+buf · tanpa parsial · tanpa TTL
+     TRAIN n=249 wr= 21.3% avgR= -2.113 PF=0.15 tot=-526.15 biaya= 1.333R SL≈  15p
+     TEST  n=144 wr= 18.1% avgR= -1.862 PF=0.15 tot=-268.13 biaya= 1.333R SL≈  15p   keluar: SL 81% TP 14% BE 6%
+     Δ vs exit kita (Trade/TEST): -2.083±0.194R / -1.822±0.216R   → |Δ| ≥ 2 SE: nyata pada n=144
+   ait(BTC): SL 1,0% / TP 2,0% · BE +1R+buf
+     TRAIN n=249 wr= 31.7% avgR= -0.046 PF=0.92 tot= -11.41 biaya= 0.026R SL≈ 797p
+     TEST  n=144 wr= 32.6% avgR= -0.091 PF=0.84 tot= -13.10 biaya= 0.028R SL≈ 729p   keluar: SL 50% BE 26% TP 23% EOF 1%
+     Δ vs exit kita (Trade/TEST): -0.016±0.075R / -0.051±0.096R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=144
+   ait(pine): grid 0,25×ATR(D1) → SL 1 grid / TP 2 grid · BE +1R+buf
+     TRAIN n=239 wr= 33.9% avgR= -0.074 PF=0.87 tot= -17.58 biaya= 0.029R SL≈ 730p
+     TEST  n=144 wr= 35.4% avgR= -0.025 PF=0.96 tot=  -3.58 biaya= 0.038R SL≈ 535p   keluar: SL 51% TP 27% BE 21% EOF 1%
+     Δ vs exit kita (Trade/TEST): -0.041±0.077R / 0.015±0.100R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=144
+   ait(pine C1–C3 default): SL 3 grid / TP 1 grid (RR 0,33) · BE +1R+buf
+     TRAIN n=239 wr= 74.1% avgR= -0.022 PF=0.92 tot=  -5.22 biaya= 0.010R SL≈2190p
+     TEST  n=144 wr= 75.0% avgR= -0.014 PF=0.95 tot=  -2.00 biaya= 0.013R SL≈1604p   keluar: TP 74% SL 25% EOF 1%
+     Δ vs exit kita (Trade/TEST): 0.011±0.042R / 0.026±0.055R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=144
+   ait(pine C4/C5): SL 2 grid / TP 1 grid (RR 0,5) · BE +1R+buf
+     TRAIN n=239 wr= 62.8% avgR= -0.086 PF=0.78 tot= -20.59 biaya= 0.014R SL≈1460p
+     TEST  n=144 wr= 66.7% avgR= -0.024 PF=0.93 tot=  -3.39 biaya= 0.019R SL≈1070p   keluar: TP 66% SL 33% EOF 1%
+     Δ vs exit kita (Trade/TEST): -0.053±0.048R / 0.017±0.064R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=144
+   kita tanpa TTL & tanpa parsial: SL 3,2×ATR(M15) / TP 2,2R saja
+     TRAIN n=249 wr=  9.6% avgR= -0.138 PF=0.61 tot= -34.24 biaya= 0.027R SL≈ 964p
+     TEST  n=144 wr= 18.1% avgR= -0.015 PF=0.96 tot=  -2.15 biaya= 0.036R SL≈ 740p   keluar: BE 49% SL 33% TP 17% EOF 1%
+     Δ vs exit kita (Trade/TEST): -0.108±0.050R / 0.025±0.080R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=144
+
+==== ETHUSD (ETHUSDT_1m.csv, 259204 tick, 45.0 hari) ====
+   spread data rata-rata = 15.00 pips (typSpread tabel 20) — executor mereka mensyaratkan --max-spread-pips 1.5, jadi di broker ini geometri pip-tetap mereka TIDAK akan pernah entry
+   entry engine (shipped): 39 trade  avgR -0.011  (TRAIN 26 / TEST 13)
+
+   kita: SL engine (max 3,2×ATR-M15/lantai biaya/swing) · TP 1R/2,2R parsial 50% · BE 0,4R · TTL 60m
+     TRAIN n= 26 wr= 42.3% avgR= -0.049 PF=0.64 tot=  -1.28 biaya= 0.045R SL≈ 357p
+     TEST  n= 13 wr= 38.5% avgR=  0.066 PF=1.87 tot=   0.86 biaya= 0.040R SL≈ 426p   keluar: TIME 100%
+     cek replikasi vs engine: ΔavgR TEST = 0.0000 (harus ≈ 0; sisa yang kecil itu pembulatan rd() engine ke desimal pair — level SL/TP engine dibulatkan, replay tidak)
+   ait: SL 15p / TP 30p (RR 1:2) · BE +1R+buf · tanpa parsial · tanpa TTL
+     TRAIN n= 26 wr=  3.8% avgR= -1.379 PF=0.02 tot= -35.85 biaya= 1.000R SL≈  15p
+     TEST  n= 13 wr= 15.4% avgR= -2.027 PF=0.10 tot= -26.35 biaya= 1.000R SL≈  15p   keluar: SL 85% BE 8% TP 8%
+     Δ vs exit kita (Trade/TEST): -1.329±0.161R / -2.093±0.549R   → |Δ| ≥ 2 SE: nyata pada n=13
+   ait(ETH): SL 1,5% / TP 3,0% · BE +1R+buf
+     TRAIN n= 26 wr= 46.2% avgR=  0.340 PF=1.67 tot=   8.83 biaya= 0.038R SL≈ 395p
+     TEST  n= 13 wr= 38.5% avgR= -0.209 PF=0.60 tot=  -2.71 biaya= 0.042R SL≈ 358p   keluar: SL 46% BE 38% TP 15%
+     Δ vs exit kita (Trade/TEST): 0.389±0.285R / -0.275±0.340R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=13
+   ait(pine): grid 0,25×ATR(D1) → SL 1 grid / TP 2 grid · BE +1R+buf
+     TRAIN n= 10 wr= 30.0% avgR= -0.621 PF=0.03 tot=  -6.21 biaya= 0.068R SL≈ 220p
+     TEST  n= 13 wr= 38.5% avgR= -0.032 PF=0.94 tot=  -0.42 biaya= 0.065R SL≈ 232p   keluar: SL 46% BE 31% TP 23%
+     Δ vs exit kita (Trade/TEST): -0.528±0.176R / -0.098±0.355R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=13
+   ait(pine C1–C3 default): SL 3 grid / TP 1 grid (RR 0,33) · BE +1R+buf
+     TRAIN n= 10 wr= 40.0% avgR= -0.494 PF=0.21 tot=  -4.94 biaya= 0.023R SL≈ 660p
+     TEST  n= 13 wr= 69.2% avgR= -0.087 PF=0.73 tot=  -1.13 biaya= 0.022R SL≈ 697p   keluar: TP 69% SL 31%
+     Δ vs exit kita (Trade/TEST): -0.401±0.224R / -0.153±0.175R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=13
+   ait(pine C4/C5): SL 2 grid / TP 1 grid (RR 0,5) · BE +1R+buf
+     TRAIN n= 10 wr= 40.0% avgR= -0.448 PF=0.31 tot=  -4.48 biaya= 0.034R SL≈ 440p
+     TEST  n= 13 wr= 69.2% avgR=  0.018 PF=1.05 tot=   0.23 biaya= 0.032R SL≈ 464p   keluar: TP 69% SL 31%
+     Δ vs exit kita (Trade/TEST): -0.355±0.254R / -0.048±0.202R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=13
+   kita tanpa TTL & tanpa parsial: SL 3,2×ATR(M15) / TP 2,2R saja
+     TRAIN n= 26 wr= 19.2% avgR=  0.115 PF=1.37 tot=   3.00 biaya= 0.045R SL≈ 357p
+     TEST  n= 13 wr= 15.4% avgR= -0.009 PF=0.95 tot=  -0.11 biaya= 0.040R SL≈ 426p   keluar: BE 69% SL 15% TP 8% EOF 8%
+     Δ vs exit kita (Trade/TEST): 0.165±0.216R / -0.075±0.232R   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=13
+
+==== EURUSD (EURUSD_1m.csv, 141372 tick, 35.2 hari) ====
+   spread data rata-rata = 2.80 pips (typSpread tabel 2.8) — executor mereka mensyaratkan --max-spread-pips 1.5, jadi di broker ini geometri pip-tetap mereka TIDAK akan pernah entry
+   entry engine (shipped): 1 trade  avgR 0.021  (TRAIN 1 / TEST 0)
+
+   kita: SL engine (max 3,2×ATR-M15/lantai biaya/swing) · TP 1R/2,2R parsial 50% · BE 0,4R · TTL 60m
+     TRAIN n=  1 wr=100.0% avgR=  0.021 PF= ∞   tot=   0.02 biaya= 0.066R SL≈  42p
+     TEST     n=0   keluar: 
+     cek replikasi vs engine: ΔavgR TEST = 0.0000 (harus ≈ 0; sisa yang kecil itu pembulatan rd() engine ke desimal pair — level SL/TP engine dibulatkan, replay tidak)
+   ait: SL 15p / TP 30p (RR 1:2) · BE +1R+buf · tanpa parsial · tanpa TTL
+     TRAIN n=  1 wr=100.0% avgR=  0.313 PF= ∞   tot=   0.31 biaya= 0.187R SL≈  15p
+     TEST     n=0   keluar: 
+/home/canary1/Downloads/Sniperforexnew/tools/_ait_geom.js:244
+      (pTe && Math.abs(pTe.m) < 2 * pTe.se ? '   → |Δ| < 2 SE: tidak terbedakan dari nol pada n=' + pTe.n : '   → |Δ| ≥ 2 SE: nyata pada n=' + pTe.n));
+                                                                                                                                                   ^
+
+TypeError: Cannot read properties of null (reading 'n')
+    at Object.<anonymous> (/home/canary1/Downloads/Sniperforexnew/tools/_ait_geom.js:244:148)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.21.0

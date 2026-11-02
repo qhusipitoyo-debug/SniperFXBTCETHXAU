@@ -1,0 +1,25 @@
+Hour OOS • mode=balanced eval=2000 split=0.5 • allowlist TRAIN = jam dengan n≥6 dan avgR≥0.02
+
+==== XAUUSD (PAXGUSDT_1m.csv, 2102412 tick, 365.0 hari 2025-10-31 → 2026-10-31) ====
+  jam di TRAIN (n≥6): 7:0.12(6) 8:0.08(10) 10:0.05(6) 14:0.01(6)
+  allowlist TRAIN = [7,8,10]   shipped engine.js = [7,8,10,11,13,15]
+  TEST 183 hari:
+   A baseline semua jam   n= 32 wr= 40.6% avgR= -0.022 PF=0.90 tot=  -0.69
+   B allowlist dari TRAIN n=  8 wr= 50.0% avgR= -0.009 PF=0.95 tot=  -0.07
+   C shipped (dipilih in-sample) n= 25 wr= 44.0% avgR=  0.016 PF=1.09 tot=   0.41
+   — pembanding in-sample penuh (semua jam) n= 76 wr= 47.4% avgR=  0.064 PF=1.44 tot=   4.83
+   kekuatan statistik TEST per jam: 7:3 8:2 9:3 10:3 11:7 12:1 13:3 14:4 15:6
+  → n terlalu kecil (baseline 32, allowlist 8) untuk memutuskan
+
+==== BTCUSD (BTCUSDT_1m.csv, 2102420 tick, 365.0 hari 2025-10-31 → 2026-10-31) ====
+  jam di TRAIN (n≥6): 0:-0.03(13) 1:0.00(10) 2:0.10(7) 4:-0.10(18) 5:-0.07(13) 6:-0.10(8) 7:-0.04(8) 8:0.01(10) 9:0.12(12) 10:-0.05(13) 13:-0.09(9) 14:-0.10(9) 15:0.05(12) 16:0.07(9) 18:0.12(8) 19:0.21(7) 20:-0.31(7) 22:-0.06(7) 23:0.06(8)
+  allowlist TRAIN = [2,9,15,16,18,19,23]   shipped engine.js = [8,9,19,23]
+  TEST 183 hari:
+   A baseline semua jam   n=183 wr= 44.3% avgR= -0.041 PF=0.76 tot=  -7.43
+   B allowlist dari TRAIN n= 56 wr= 41.1% avgR= -0.089 PF=0.47 tot=  -4.97
+   C shipped (dipilih in-sample) n= 35 wr= 57.1% avgR=  0.037 PF=1.38 tot=   1.29
+   — pembanding in-sample penuh (semua jam) n=393 wr= 41.5% avgR= -0.033 PF=0.79 tot= -13.16
+   kekuatan statistik TEST per jam: 0:8 1:9 2:8 3:9 4:5 5:6 6:11 7:3 8:10 9:11 10:10 11:10 12:4 13:3 14:15 15:8 16:5 17:11 18:7 19:6 20:4 21:7 22:4 23:9
+  → MEMBURUK di TEST (-0.048R/trade) — jam TRAIN tidak generalisasi
+
+exit=0

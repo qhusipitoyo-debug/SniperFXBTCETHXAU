@@ -1,0 +1,32 @@
+Uji arah grid-breakout aiterminaltrading vs sinyal engine • horizon 15 mnt • grid 150 pips • confirm 2 scan • EMA(M1) 20 • session=true news=true • split=0.6
+CATATAN: "scan" mereka = 1 detik; data kita 15 detik, jadi CONFIRM=2 di sini = tertahan 30 detik, bukan 2 detik. Konsekuensinya sinyal kita lebih sedikit DAN lebih tertunda — ini versi konservatif dari aturan mereka, bukan salinan identik.
+
+==== XAUUSD (PAXGUSDT_1m.csv, 365.0 hari, grid = 15.00) ====
+   sinyal: grid 7264 → 4013 sampel | engine 525382 → 35025 sampel
+   grid mereka (breakout sel 150p, EMA searah)
+        TRAIN  n=2623 edge=  0.014 ATR  p=0.428 ✘  selang95=[-0.034,0.037]  drag=-0.061  bersih=-0.047
+        TEST   n=1390 edge=  0.029 ATR  p=0.207 ✘  selang95=[-0.049,0.044]  drag=-0.082  bersih=-0.053
+   engine ini (arah mentah dari evaluate, tanpa gerbang)
+        TRAIN  n=21010 edge= -0.001 ATR  p=0.798 ✘  selang95=[-0.012,0.013]  drag=-0.123  bersih=-0.125
+        TEST   n=14015 edge= -0.020 ATR  p=0.023 ✔  selang95=[-0.017,0.018]  drag=-0.204  bersih=-0.225
+   di TEST yang berimpit dengan sinyal engine (±1 horizon): searah 764 • berlawanan 626
+        searah  n= 764 edge=  0.018 ATR  p=0.554 ✘  selang95=[-0.067,0.055]  drag=-0.082  bersih=-0.064
+        berlawanann= 626 edge=  0.042 ATR  p=0.213 ✘  selang95=[-0.070,0.068]  drag=-0.082  bersih=-0.041
+   → selisih edge TEST (grid − engine) = 0.019 ATR. Dua-duanya angka sendiri: tidak ada uji beda dua sampel di sini, jadi selisih kecil jangan dibaca sebagai kesimpulan.
+
+Uji arah grid-breakout aiterminaltrading vs sinyal engine • horizon 15 mnt • grid 15 pips • confirm 2 scan • EMA(M1) 20 • session=true news=true • split=0.6
+CATATAN: "scan" mereka = 1 detik; data kita 15 detik, jadi CONFIRM=2 di sini = tertahan 30 detik, bukan 2 detik. Konsekuensinya sinyal kita lebih sedikit DAN lebih tertunda — ini versi konservatif dari aturan mereka, bukan salinan identik.
+
+==== XAUUSD (PAXGUSDT_1m.csv, 365.0 hari, grid = 1.50) ====
+   sinyal: grid 51498 → 11050 sampel | engine 525382 → 35025 sampel
+   grid mereka (breakout sel 15p, EMA searah)
+        TRAIN  n=6851 edge=  0.004 ATR  p=0.717 ✘  selang95=[-0.020,0.021]  drag=-0.091  bersih=-0.087
+        TEST   n=4199 edge=  0.023 ATR  p=0.081 ✘  selang95=[-0.027,0.025]  drag=-0.119  bersih=-0.095
+   engine ini (arah mentah dari evaluate, tanpa gerbang)
+        TRAIN  n=21010 edge= -0.001 ATR  p=0.804 ✘  selang95=[-0.012,0.013]  drag=-0.123  bersih=-0.125
+        TEST   n=14015 edge= -0.021 ATR  p=0.023 ✔  selang95=[-0.017,0.018]  drag=-0.204  bersih=-0.225
+   di TEST yang berimpit dengan sinyal engine (±1 horizon): searah 2254 • berlawanan 1945
+        searah  n=2254 edge= -0.001 ATR  p=0.941 ✘  selang95=[-0.039,0.034]  drag=-0.123  bersih=-0.125
+        berlawanann=1945 edge=  0.052 ATR  p=0.004 ✔  selang95=[-0.038,0.034]  drag=-0.114  bersih=-0.062
+   → selisih edge TEST (grid − engine) = 0.019 ATR. Dua-duanya angka sendiri: tidak ada uji beda dua sampel di sini, jadi selisih kecil jangan dibaca sebagai kesimpulan.
+

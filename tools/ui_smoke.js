@@ -162,6 +162,7 @@ require('../app.js');
 /* ---------- replay (jalan setelah boot IIFE app.js selesai — microtask di-flush dulu) ---------- */
 const ONLYSYM=E.PAIRS[Object.keys(E.PAIRS).find(k=>(E.PAIRS[k].binance||'')===SYM.toLowerCase())||'EURUSD'].deriv;
 const present={},churn={appear:0,drop:0},pin={ok:0,total:0},seenHist={};
+let cardsTotal=0,cardsNoLevels=0,cardsBadNum=0,lastNoLevels={},badNumSample='',entryNumSample='',entryCardSample='',numsByStage={};
 let idx=0,stepMs=500,processed=0,planFrames=0;
 function replay(renderCb){
 for(let t=simNow;t<ticks[ticks.length-1][0];t+=stepMs){
@@ -179,6 +180,19 @@ for(let t=simNow;t<ticks[ticks.length-1][0];t+=stepMs){
   seen.forEach(k=>{if(!present[k]){present[k]=true;churn.appear++}});
   Object.keys(present).forEach(k=>{if(present[k]&&!seen.has(k)){present[k]=false;churn.drop++}});
   if(/alertCard[^"]*entry/.test(html)){planFrames++;pin.total++;if(/pinned/.test(html))pin.ok++}
+  /* kartu yang tampil TANPA angka entry/SL/TP = kartu yang tidak bisa dipakai operator.
+     Ini persis laporan "sudah muncul tapi tidak ada nilai market entry dan TP/SL-nya". */
+  for(const c of (html.match(/<article class="alertCard[\s\S]*?<\/article>/g)||[])){
+    cardsTotal++;
+    const m=c.match(/data-pair="([A-Z]+)"/), stg=(c.match(/pill [a-z]+">([A-Z]+)/)||[])[1]||'?';
+    if(!/alertLevels/.test(c)){cardsNoLevels++;if(!lastNoLevels[stg])lastNoLevels[stg]=c}
+    else{
+      const nums=(c.match(/<b>([^<]*)<\/b>/g)||[]).map(x=>x.replace(/<\/?b>/g,''));
+      if(nums.some(x=>/NaN|undefined|^—$/.test(x))){cardsBadNum++;if(!badNumSample)badNumSample=m+': '+nums.join(' | ')}
+      else{numsByStage[stg]=numsByStage[stg]||nums.slice();if(stg==='ENTRY')entryNumSample=nums.join(' | ');
+        if(stg==='ENTRY'&&!entryCardSample)entryCardSample=c}
+    }
+  }
   seenHist[t]=seen.size;
 }
 report();
@@ -193,6 +207,14 @@ console.log('  kartu tampil       : '+churn.appear+' kemunculan, '+churn.drop+' 
 console.log('  churn board/jam    : '+((churn.appear+churn.drop)/Number(hours)).toFixed(1)+' perubahan baris');
 console.log('  frame berisi ENTRY : '+planFrames+'; kartu 🔒 terpaku '+(planFrames?(100*pin.ok/Math.max(1,pin.total)).toFixed(0)+'%':'—'));
 console.log('  isi board terakhir : '+(els.alertBoard?String(els.alertBoard.innerHTML).slice(0,200).replace(/</g,'〈'):'—'));
+/* ---- KELENGKAPAN KARTU: kartu tanpa blok alertLevels = tidak ada angka entry/SL/TP untuk dipakai ---- */
+console.log('  kartu ditampilkan    : '+cardsTotal+' frame; tanpa angka ENTRY/SL/TP : '+cardsNoLevels+'; angka rusak (NaN/—) : '+cardsBadNum);
+if(cardsTotal){for(const stg of Object.keys(numsByStage))console.log('     contoh '+stg+' → '+numsByStage[stg].join(' | '));
+  if(entryNumSample)console.log('     contoh ENTRY → '+entryNumSample)}
+if(cardsNoLevels){for(const stg of Object.keys(lastNoLevels))console.log('     ✘ sampel kartu '+stg+' tanpa levels: '+String(lastNoLevels[stg]).replace(/</g,'〈').slice(0,300));
+  errors.push('ada '+cardsNoLevels+' frame kartu TANPA blok angka entry/SL/TP')}
+if(badNumSample)errors.push('kartu dengan angka rusak: '+badNumSample);
+if(entryCardSample)console.log('     satu kartu ENTRY utuh (yang dibaca operator):\n'+entryCardSample.replace(/\n\s+/g,' ').slice(0,1400));
 console.log('  scan board         : '+(els.scanBoard?String(els.scanBoard.innerHTML).slice(0,160).replace(/</g,'〈'):'—'));
 /* ---- PANEL STATISTIK PER PASANGAN ----
    Yang diuji di sini adalah hal yang paling mahal kalau salah: vonis BAGUS/JELEK.

@@ -1,0 +1,130 @@
+
+signal_test GBPUSD • 141268 tick • 35.2 hari • mode balanced • jendela 15 mnt • stride 15 mnt • bootstrap 3000 (L=10, seed 7)
+  eval mesin      : 34868 → 2320 sampel tidak tumpang tindih
+
+A. SEMUA sinyal arah, tanpa gerbang apa pun (pertanyaan inti: adakah informasi arah?)
+   n=2320 • ✘ sinyal TIDAK terbedakan dari nol (p=0.184) • edge -0.022 ATR • selang nol 95% [-0.033, 0.033]
+     edge kotor -0.022 ATR  −  drag spread -0.827 ATR  =  setelah biaya -0.849 ATR
+     tertimbang skor  : -0.020 ATR (sinyal kuat dianggap lebih percaya)
+
+B. Sinyal yang LOLOS SEMUA gerbang (ini yang boleh jadi trade)
+   n=0 • terlalu sedikit (<20)
+
+C. ABLATION gerbang — apa yang terjadi kalau satu gerbang DIBUANG (konsep filters() jesse, diuji terbalik)
+   gerbang yang berguna = edge naik saat dia dipakai. Kalau justru naik saat dibuang, dia menghalangi sinyal bagus.
+   "hilang" = jumlah sampel kalau gerbang itu dilonggarkan; kalau sama dengan "n lolos", gerbang itu tidak pernah menolak apa pun di sini.
+
+   gerbang              n lolos  hilang   edge+gerbang   edge−gerbang   Δ
+   ATR/biaya                  0       5        —        -0.354   —
+   ER (choppy)                0       0        —        —   —
+   Skor                       0       0        —        —   —
+   Mom&trend searah           0       0        —        —   —
+   Mom&trend cukup            0       0        —        —   —
+   HTF tidak lawan            0       0        —        —   —
+   Brk floor                  0       0        —        —   —
+   Brk ceil                   0       1        —        -0.137   —
+   Flow tidak lawan           0       0        —        —   —
+   z jangan kejar             0       0        —        —   —
+   retrace                    0       0        —        —   —
+   SL swing valid             0       0        —        —   —
+   spread                     0       0        —        —   —
+   spike volatilitas          0       0        —        —   —
+
+D. Per sisi (asimetri arah — mesin ini pernah terbukti lebih mudah bilang UP)
+   UP   n=1217 • ✘ sinyal TIDAK terbedakan dari nol (p=0.533) • edge -0.024 ATR • selang nol 95% [-0.077, 0.027]
+     edge kotor -0.024 ATR  −  drag spread -0.801 ATR  =  setelah biaya -0.825 ATR
+   DOWN n=1103 • ✘ sinyal TIDAK terbedakan dari nol (p=0.563) • edge -0.019 ATR • selang nol 95% [-0.065, 0.028]
+     edge kotor -0.019 ATR  −  drag spread -0.856 ATR  =  setelah biaya -0.875 ATR
+
+E. KONTROL ALAT (uji dirinya sendiri, supaya "✘ tidak signifikan" di atas bisa dipercaya)
+   nabi    n=2320 • ✔ sinyal TERBEDA dari nol (p=0.000) • edge 0.552 ATR • selang nol 95% [-0.033, 0.032]
+     edge kotor 0.552 ATR  −  drag spread 0.001 ATR  =  setelah biaya 0.553 ATR
+   koin    n=2320 • ✘ sinyal TIDAK terbedakan dari nol (p=0.533) • edge 0.011 ATR • selang nol 95% [-0.033, 0.034]
+     edge kotor 0.011 ATR  −  drag spread -0.006 ATR  =  setelah biaya 0.005 ATR
+
+signal_test USDJPY • 141268 tick • 35.2 hari • mode balanced • jendela 15 mnt • stride 15 mnt • bootstrap 3000 (L=10, seed 7)
+  eval mesin      : 34868 → 2320 sampel tidak tumpang tindih
+
+A. SEMUA sinyal arah, tanpa gerbang apa pun (pertanyaan inti: adakah informasi arah?)
+   n=2320 • ✘ sinyal TIDAK terbedakan dari nol (p=0.908) • edge -0.002 ATR • selang nol 95% [-0.032, 0.031]
+     edge kotor -0.002 ATR  −  drag spread -0.535 ATR  =  setelah biaya -0.537 ATR
+     tertimbang skor  : -0.025 ATR (sinyal kuat dianggap lebih percaya)
+
+B. Sinyal yang LOLOS SEMUA gerbang (ini yang boleh jadi trade)
+   n=2 • terlalu sedikit (<20)
+
+C. ABLATION gerbang — apa yang terjadi kalau satu gerbang DIBUANG (konsep filters() jesse, diuji terbalik)
+   gerbang yang berguna = edge naik saat dia dipakai. Kalau justru naik saat dibuang, dia menghalangi sinyal bagus.
+   "hilang" = jumlah sampel kalau gerbang itu dilonggarkan; kalau sama dengan "n lolos", gerbang itu tidak pernah menolak apa pun di sini.
+
+   gerbang              n lolos  hilang   edge+gerbang   edge−gerbang   Δ
+   ATR/biaya                  2       3        0.104        0.196  +0.092
+   Mom&trend searah           2       2        0.104        0.104  +0.000
+   Mom&trend cukup            2       2        0.104        0.104  +0.000
+   HTF tidak lawan            2       2        0.104        0.104  +0.000
+   Brk floor                  2       2        0.104        0.104  +0.000
+   Flow tidak lawan           2       2        0.104        0.104  +0.000
+   z jangan kejar             2       2        0.104        0.104  +0.000
+   SL swing valid             2       2        0.104        0.104  +0.000
+   spread                     2       2        0.104        0.104  +0.000
+   spike volatilitas          2       2        0.104        0.104  +0.000
+   ER (choppy)                2       3        0.104        -0.049  -0.153
+   Skor                       2       6        0.104        -0.128  -0.232
+   retrace                    2       3        0.104        -0.200  -0.304
+   Brk ceil                   2      11        0.104        -0.223  -0.327
+
+D. Per sisi (asimetri arah — mesin ini pernah terbukti lebih mudah bilang UP)
+   UP   n=1273 • ✘ sinyal TIDAK terbedakan dari nol (p=0.699) • edge -0.009 ATR • selang nol 95% [-0.047, 0.034]
+     edge kotor -0.009 ATR  −  drag spread -0.564 ATR  =  setelah biaya -0.573 ATR
+   DOWN n=1047 • ✘ sinyal TIDAK terbedakan dari nol (p=0.788) • edge 0.007 ATR • selang nol 95% [-0.043, 0.059]
+     edge kotor 0.007 ATR  −  drag spread -0.500 ATR  =  setelah biaya -0.493 ATR
+
+E. KONTROL ALAT (uji dirinya sendiri, supaya "✘ tidak signifikan" di atas bisa dipercaya)
+   nabi    n=2320 • ✔ sinyal TERBEDA dari nol (p=0.000) • edge 0.537 ATR • selang nol 95% [-0.031, 0.030]
+     edge kotor 0.537 ATR  −  drag spread 0.002 ATR  =  setelah biaya 0.539 ATR
+   koin    n=2320 • ✘ sinyal TIDAK terbedakan dari nol (p=0.150) • edge -0.023 ATR • selang nol 95% [-0.032, 0.031]
+     edge kotor -0.023 ATR  −  drag spread 0.004 ATR  =  setelah biaya -0.019 ATR
+
+signal_test AUDUSD • 141276 tick • 35.2 hari • mode balanced • jendela 15 mnt • stride 15 mnt • bootstrap 3000 (L=10, seed 7)
+  eval mesin      : 34870 → 2320 sampel tidak tumpang tindih
+
+A. SEMUA sinyal arah, tanpa gerbang apa pun (pertanyaan inti: adakah informasi arah?)
+   n=2320 • ✔ sinyal TERBEDA dari nol (p=0.012) • edge -0.042 ATR • selang nol 95% [-0.031, 0.033]
+     edge kotor -0.042 ATR  −  drag spread -1.252 ATR  =  setelah biaya -1.294 ATR
+     tertimbang skor  : -0.018 ATR (sinyal kuat dianggap lebih percaya)
+
+B. Sinyal yang LOLOS SEMUA gerbang (ini yang boleh jadi trade)
+   n=0 • terlalu sedikit (<20)
+
+C. ABLATION gerbang — apa yang terjadi kalau satu gerbang DIBUANG (konsep filters() jesse, diuji terbalik)
+   gerbang yang berguna = edge naik saat dia dipakai. Kalau justru naik saat dibuang, dia menghalangi sinyal bagus.
+   "hilang" = jumlah sampel kalau gerbang itu dilonggarkan; kalau sama dengan "n lolos", gerbang itu tidak pernah menolak apa pun di sini.
+
+   gerbang              n lolos  hilang   edge+gerbang   edge−gerbang   Δ
+   ATR/biaya                  0       2        —        -0.074   —
+   ER (choppy)                0       0        —        —   —
+   Skor                       0       0        —        —   —
+   Mom&trend searah           0       0        —        —   —
+   Mom&trend cukup            0       0        —        —   —
+   HTF tidak lawan            0       0        —        —   —
+   Brk floor                  0       0        —        —   —
+   Brk ceil                   0       0        —        —   —
+   Flow tidak lawan           0       0        —        —   —
+   z jangan kejar             0       0        —        —   —
+   retrace                    0       0        —        —   —
+   SL swing valid             0       0        —        —   —
+   spread                     0       0        —        —   —
+   spike volatilitas          0       0        —        —   —
+
+D. Per sisi (asimetri arah — mesin ini pernah terbukti lebih mudah bilang UP)
+   UP   n=1216 • ✘ sinyal TIDAK terbedakan dari nol (p=0.511) • edge -0.036 ATR • selang nol 95% [-0.087, 0.011]
+     edge kotor -0.036 ATR  −  drag spread -1.266 ATR  =  setelah biaya -1.302 ATR
+   DOWN n=1104 • ✘ sinyal TIDAK terbedakan dari nol (p=0.486) • edge -0.048 ATR • selang nol 95% [-0.088, -0.006]
+     edge kotor -0.048 ATR  −  drag spread -1.237 ATR  =  setelah biaya -1.285 ATR
+
+E. KONTROL ALAT (uji dirinya sendiri, supaya "✘ tidak signifikan" di atas bisa dipercaya)
+   nabi    n=2320 • ✔ sinyal TERBEDA dari nol (p=0.000) • edge 0.551 ATR • selang nol 95% [-0.033, 0.035]
+     edge kotor 0.551 ATR  −  drag spread 0.079 ATR  =  setelah biaya 0.630 ATR
+   koin    n=2320 • ✘ sinyal TIDAK terbedakan dari nol (p=0.595) • edge 0.010 ATR • selang nol 95% [-0.032, 0.033]
+     edge kotor 0.010 ATR  −  drag spread -0.010 ATR  =  setelah biaya -0.000 ATR
+exit=0

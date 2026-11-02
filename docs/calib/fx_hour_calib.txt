@@ -1,0 +1,37 @@
+FX hour calib • evalMs=2000
+
+==== EURUSD  (EURUSDT_1m.csv, 259200 ticks) ====
+balanced ALL hours gate  n=3 wr=66.7% avgR=0.368 PF=27.33 tot=1.11
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== GBPUSD  (GBPUSD_1m.csv, 141268 ticks) ====
+balanced ALL hours gate  n=0
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== USDJPY  (USDJPY_1m.csv, 141268 ticks) ====
+balanced ALL hours gate  n=4 wr=25.0% avgR=-0.365 PF=0.09 tot=-1.46
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== USDCHF  (USDCHF_1m.csv, 141272 ticks) ====
+balanced ALL hours gate  n=0
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== AUDUSD  (AUDUSD_1m.csv, 141276 ticks) ====
+balanced ALL hours gate  n=0
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== USDCAD  (USDCAD_1m.csv, 141276 ticks) ====
+balanced ALL hours gate  n=0
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
+==== NZDUSD  (NZDUSD_1m.csv, 141280 ticks) ====
+balanced ALL hours gate  n=0
+jam (n≥6):
+usulan hours=[]  (buang bad=[])
+
