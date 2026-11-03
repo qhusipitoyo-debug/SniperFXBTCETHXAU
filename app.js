@@ -551,22 +551,28 @@ function whyEmptyHtml(rows){
   /* yang paling siap naik ke atas: countdown lebih dulu, baru |skor| */
   list.sort((a,b)=>b.pctv-a.pctv||Math.abs(b.x.score||0)-Math.abs(a.x.score||0));
   const best=list[0];
-  const head=`<div class="whyRow whyHead"><span>PAIR</span><span>SISI</span><span>SKOR</span><span>KUNCI</span><span>PENAHAN UTAMA</span><span>ATR/biaya · ER · spread</span></div>`;
+  const head=`<div class="whyRow whyHead"><span>PAIR</span><span>SISI</span><span>SKOR</span><span>KEKUATAN</span><span>KUNCI</span><span>PENAHAN UTAMA</span><span>ATR/biaya · ER · spread</span></div>`;
   const body=list.map(r=>{
     const side=r.x.side==='UP'?'<span class="upText">BUY</span>':r.x.side==='DOWN'?'<span class="downText">SELL</span>':'<span class="whyMuted">—</span>';
+    /* KEKUATAN = seberapa kuat arah BUY/SELL saat ini (upProbability/downProbability dari mesin),
+       hidup/bergerak tiap evaluasi, meskipun belum ada yang terkunci. BUKAN konfirmasi/lock. */
+    const strengthPct=r.x.side==='UP'?Math.round((r.x.upProbability||.5)*100)
+      :r.x.side==='DOWN'?Math.round((r.x.downProbability||.5)*100):50;
+    const strengthCls=strengthPct>=70?'whyOk':(strengthPct>=60?'whyMuted':'whyNo');
+    const kekuatan=`<span class="${strengthCls}">${r.x.side==='UP'?'BUY':r.x.side==='DOWN'?'SELL':'—'} ${strengthPct}%</span>`;
     const bar=`<span class="whyLock"><i style="width:${r.pctv}%"></i>${r.pctv}%</span>`;
+    const gp=Number.isFinite(r.x.gatesPassed)?r.x.gatesPassed:0, gt=Number.isFinite(r.x.gatesTotal)?r.x.gatesTotal:14;
     const gates=r.blocked||!r.x.f?'<span class="whyMuted">—</span>':
       (r.f.costRatio>=r.f.minCost?yes(r.f.costRatio.toFixed(1)+'× vs '+r.f.minCost+'×'):no(r.f.costRatio.toFixed(1)+'/'+r.f.minCost+'×'))+
       ' '+(r.f.er>=r.f.minER?yes('ER '+r.f.er.toFixed(2)):no('ER '+r.f.er.toFixed(2)+' < '+r.f.minER))+
-      ' <span class="whyMuted">spr '+r.f.spreadPips.toFixed(1)+'p · biaya '+r.f.cost.toFixed(1)+'p</span>';
+      ' <span class="whyMuted">spr '+r.f.spreadPips.toFixed(1)+'p · biaya '+r.f.cost.toFixed(1)+'p · gerbang '+gp+'/'+gt+'</span>';
     const prior=Array.isArray(r.c.hours)&&r.c.hours.length?
       ` <span class="${r.x.priorOut?'whyPrior':'whyMuted'}">${r.x.priorOut?'luar':'dalam'} prior jam ${r.c.hours.join(',')} (label)</span>`:'';
-    return `<div class="whyRow"><b>${r.c.name}</b>${side}<span>${r.x.status==='ok'?sgn(r.x.score):'—'}</span>${bar}`+
+    return `<div class="whyRow"><b>${r.c.name}</b>${side}<span>${r.x.status==='ok'?sgn(r.x.score):'—'}</span>${kekuatan}${bar}`+
       `<span class="${r.blocked?'whyBlk':'whyNo'}">${esc(r.penahan)}${prior}</span>${gates}</div>`;
   }).join('');
   const hint=best&&!best.blocked&&best.pctv<100?
-    `<div class="whyNote">Terdekat: <b>${esc(best.c.name)}</b> ${best.pctv}% dari ${Math.round(best.persist/1000)} detik countdown — terkunci hanya kalau SELURUH gerbang lolos BERSAMAAN dan bertahan sampai 100%; satu gerbang kedip = countdown berhenti. Tidak ada threshold yang diturunkan untuk memaksanya.</div>`:'';
-  return `<div class="whyEmpty"><div class="whyNote">0 kartu ENTRY/SETUP — feed hidup (${rows.length} pair jalan), yang menahan adalah gerbang ini. Baris diurutkan dari yang paling dekat ke TERKUNCI.</div>${head}${body}${hint}</div>`;
+    `<div class="whyNote">Terdekat: <b>${esc(best.c.name)}</b> — KEKUATAN ${best.x.side==='UP'?Math.round((best.x.upProbability||.5)*100):Math.round((best.x.downProbability||.5)*100)}% (arah BUY/SELL saat ini, bergerak) · KUNCI ${best.pctv}% dari ${Math.round(best.persist/1000)} detik countdown · gerbang ${Number.isFinite(best.x.gatesPassed)?best.x.gatesPassed:0}/${Number.isFinite(best.x.gatesTotal)?best.x.gatesTotal:14}. Angka KEKUATAN bukan sinyal: ia tetap terkunci hanya kalau SELURUH gerbang lolos BERSAMAAN dan bertahan sampai 100%; satu gerbang kedip = countdown berhenti. Tidak ada threshold yang diturunkan untuk memaksanya.</div>`:'';  return `<div class="whyEmpty"><div class="whyNote">0 kartu ENTRY/SETUP — feed hidup (${rows.length} pair jalan), yang menahan adalah gerbang ini. Baris diurutkan dari yang paling dekat ke TERKUNCI.</div><div class="whyNote"><b>KEKUATAN</b> = arah BUY/SELL saat ini (bergerak tiap evaluasi — bukan sinyal, bukan lock). <b>KUNCI</b> = countdown lock (0% kalau belum semua gerbang lolos bersamaan). <b>gerbang X/14</b> = berapa gerbang soft yang lolos saat ini.</div>${head}${body}${hint}</div>`;
 }
 
 /* ---------- main render ---------- */function render(){

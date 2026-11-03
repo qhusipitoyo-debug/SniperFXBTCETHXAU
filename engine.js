@@ -477,6 +477,9 @@ function create(pairKey,opts){
       if(cand.bleed>prm.CONFIRM_GRACE)cand.prog=Math.max(0,cand.prog-dt*prm.BLEED_DECAY);
     }else{cand.prog=0;cand.bleed=0}
     out.prog=cand.prog;out.sigOK=sigOK;out.qualified=cand.prog>0||sigOK;
+    /* berapa gerbang (soft) yang lolos saat ini — dipakai panel untuk menampilkan kemajuan
+       hidup (0..14) meskipun belum satu pun kandidat yang terkunci. Bukan sinyal, hanya ukuran. */
+    out.gatesPassed=gates.length-failed.length;out.gatesTotal=gates.length;
 
     if(!hard&&!blocked&&cand.prog>=mode.persist&&hardOK){
       const plan=buildPlan(side,now,atr);
