@@ -139,10 +139,22 @@ costPips() = Math.max((ask - bid) / P.pip, P.typSpread) + COST_EXTRA_PIPS
 |---|---|---|---|---|---|
 | precision | 0,55 | 0,36 | **4,0** | 30 s | 25 mnt |
 | balanced | 0,48 | 0,32 | **3,5** | 20 s | 15 mnt |
+| agresif | 0,42 | 0,26 | **2,0** | 8 s | 8 mnt |
 | momentum | 0,44 | 0,28 | **3,2** | 15 s | 12 mnt |
 | liquidity | 0,48 | 0,32 | **3,5** | 20 s | 18 mnt |
 | auto | 0,58 | 0,38 | **4,0** | 30 s | 30 mnt |
 | edge | 0,65 | 0,42 | **4,5** | 40 s | 45 mnt |
+
+**`agresif` bukan mode yang lebih terbukti.** Ia ditambahkan 3-11-2026 setelah `tools/_fx_funnel.js`
+menunjukkan bahwa major FX nyaris tidak pernah lolos gerbang biaya: EURUSD 0,013% evaluasi, GBP/USD,
+USD/CHF, AUD/USD, USD/CAD, NZD/USD 0,000%, USD/JPY 0,071% pada 45 hari data replay. Penyebab utamanya
+bukan sinyal, tapi asumsi biaya: `typSpread` lama 2,8–4,5 pips vs spread akun terukur 0,90–1,20 pips.
+Karena itu dua hal diubah bersamaan: `typSpread` major diturunkan ke 1,2–1,5 pips (emas 3,0; crypto
+tetap 20) **dan** `agresif` ditambahkan sebagai pilihan eksplisit. `agresif` sengaja melewati
+`calib.modeFloor` EUR/XAU/ETH; kalau tidak, lantai `minCost:4.0` akan mengembalikannya ke balanced.
+Konsekuensi yang harus dibaca: `minCost:2.0` berada di bawah pagar EA 4,0, jadi sinyal dashboard bisa
+ditolak AUTO-ORDER saat spread nyata > 25% ATR. Mode ini untuk melihat/menguji sinyal, bukan klaim edge.
+Replay lama tetap konservatif karena CSV menyimpan spread lama dan `costPips()` memakai `Math.max`.
 
 ### 4.3 Pagar spread di terminal, dan zona mati yang pernah tercipta oleh keduanya
 

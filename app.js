@@ -32,7 +32,7 @@ const normPair=q=>String(q||'').toUpperCase().replace(/[^A-Z]/g,'');
 
 let selectedFeed=(()=>{const q=_qs.get('feed')||lsGet('fxSniperFeed');return FEEDS[q]?q:(q==='binance'?'binance':'deriv')})();
 let selectedPair=(()=>{const q=normPair(_qs.get('pair')||lsGet('fxSniperPair'));return PAIRS[q]?q:'EURUSD'})();
-let selectedMode=(()=>{const q=_qs.get('mode')||lsGet('fxSniperMode');return (E.MODES&&E.MODES[q])?q:'balanced'})();
+let selectedMode=(()=>{const q=_qs.get('mode')||lsGet('fxSniperMode');return (E.MODES&&E.MODES[q])?q:'agresif'})();
 let scanFilter=(()=>{const q=_qs.get('filter')||lsGet('fxSniperFilter');return ['action','threshold','all'].includes(q)?q:'action'})();
 
 const engines={};          // pair -> engine
@@ -85,8 +85,12 @@ function openWS(url,onOpen,onMsg,label='ws'){
       const me=new WebSocket(url);ws=me;
       me.onopen=()=>{if(dead||ws!==me){try{me.close()}catch{}return}console.log(`[${label}] connected`);try{onOpen&&onOpen(me)}catch{}};
       me.onmessage=e=>{if(dead||ws!==me)return;delay=500;try{onMsg(JSON.parse(e.data))}catch(err){console.warn(`[${label}] parse`,err)}};
-      me.onerror=()=>{if(!dead&&ws===me)console.warn(`[${label}] error`)};
-      me.onclose=ev=>{if(dead||ws!==me)return;console.warn(`[${label}] closed code=${ev.code} — retry ${delay}ms`);retry()};
+      me.onerror=()=>{if(!dead&&ws===me)console.info(`[${label}] network error — reconnect otomatis`)};
+      me.onclose=ev=>{if(dead||ws!==me)return;
+        /* 1006 = koneksi putus tanpa close frame (Wi-Fi/proxy/server). Itu keadaan jaringan
+           normal dan sudah ditangani retry, jadi jangan dicetak sebagai error merah. */
+        const net=[1000,1001,1005,1006].includes(ev.code),log=net?console.info:console.warn;
+        log(`[${label}] ${net?'reconnect':'closed'} code=${ev.code} — retry ${delay}ms`);retry()};
     }catch(err){console.error(`[${label}] open fail`,err);retry()}
   };
   go();
@@ -213,7 +217,12 @@ function startBinanceMulti(keys){
 function startDerivMulti(keys){
   clearFeedHelpers();lastWsMsg=0;
   const pendingHist=new Set();
+  let pingTimer=null;
   const stopWs=openWS(DERIV_WS,ws=>{
+    /* Deriv memutus koneksi publik yang diam terlalu lama. Ping ringan tiap 20 dtk
+       mencegah close 1006 saat pasar sepi, tanpa menambah subscription. */
+    if(pingTimer)clearInterval(pingTimer);
+    pingTimer=setInterval(()=>{try{ws.send(JSON.stringify({ping:1}))}catch{}},20000);
     keys.forEach(k=>{
       const sym=PAIRS[k].deriv;
       ws.send(JSON.stringify({ticks:sym,subscribe:1}));
@@ -252,7 +261,7 @@ function startDerivMulti(keys){
       startFeed();
     }
   },10000);
-  return()=>{clearFeedHelpers();try{stopWs()}catch{}};
+  return()=>{clearFeedHelpers();if(pingTimer)clearInterval(pingTimer);try{stopWs()}catch{}};
 }
 
 function startProxy(src){
@@ -834,8 +843,10 @@ function renderPairStats(){
       const P=pairStats.pairs[k];
       if(!P)return pairRowHtml(E.PAIRS[k].name,null,(pairStats.missing||[]).find(m=>m.pair===k)?.reason||'tidak diuji');
       const s=P.modes[mode];
-      return pairRowHtml(P.name+' <em>'+P.symbol+'</em>',s,
-        (P.window&&P.window.days?'±'+P.window.days+' hari • ':'')+outcomeNote(s));
+      const extra=s
+        ? (P.window&&P.window.days?'±'+P.window.days+' hari • ':'')+outcomeNote(s)
+        : 'mode '+String(mode).toUpperCase()+' belum ada di pair_stats.json — jalankan node tools/pair_stats.js';
+      return pairRowHtml(P.name+' <em>'+P.symbol+'</em>',s,extra);
     }).join('');
     const tested=Object.keys(pairStats.pairs).length;
     setBoard('pairStatsBoard',PAIR_HEAD+rows);

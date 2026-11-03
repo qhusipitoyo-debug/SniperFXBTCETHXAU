@@ -79,14 +79,16 @@ const PAIR_STATS={generatedAt:Date.now()-3600000,
   missing:Object.keys(E.PAIRS).filter(k=>!['BTCUSD','XAUUSD','ETHUSD','EURUSD','USDJPY'].includes(k))
     .map(k=>({pair:k,name:E.PAIRS[k].name,reason:'tidak ada sumber data lokal untuk pair ini'}))};
 /* Berkas keluaran tools/collector.js — ledger JSONL (baris mentah per plan) dan ringkasannya.
-   Tiga plan ini cukup untuk menguji: filter mode, sumber gabungan, dan baris status daemon. */
+   Empat plan ini cukup untuk menguji: filter mode, sumber gabungan, dan baris status daemon.
+   Satu baris `agresif` ditambahkan supaya smoke test juga hijau saat mode itu dipilih. */
 const DAEMON_LEDGER=[
   {id:'EURUSD|1|UP',pair:'EURUSD',mode:'balanced',t:Date.now()-3600000,closedAt:Date.now(),side:'UP',done:'TP2',resultR:1.9,mfe:2.1,mae:-.2},
   {id:'EURUSD|2|DOWN',pair:'EURUSD',mode:'balanced',t:Date.now()-7200000,closedAt:Date.now(),side:'DOWN',done:'SL',resultR:-1,mfe:.1,mae:-1},
-  {id:'XAUUSD|3|UP',pair:'XAUUSD',mode:'momentum',t:Date.now()-3600000,closedAt:Date.now(),side:'UP',done:'TIME',resultR:.3,mfe:.4,mae:-.1}
+  {id:'XAUUSD|3|UP',pair:'XAUUSD',mode:'momentum',t:Date.now()-3600000,closedAt:Date.now(),side:'UP',done:'TIME',resultR:.3,mfe:.4,mae:-.1},
+  {id:'EURUSD|4|UP',pair:'EURUSD',mode:'agresif',t:Date.now()-1800000,closedAt:Date.now(),side:'UP',done:'BE',resultR:.1,mfe:.5,mae:-.3}
 ];
 const DAEMON_STATS={kind:'live',generatedAt:Date.now(),startedAt:Date.now()-3*3600000,uptimeMin:180.4,
-  feed:'deriv',modes:['balanced','momentum'],pairsTested:2,
+  feed:'deriv',modes:['balanced','momentum','agresif'],pairsTested:2,
   counters:{ticks:12345,closed:3,reconnects:0,errors:0,lastTickAgeS:2.4},pairs:{},total:{}};
 /* FX_SNIPER_EMPTY_STATS=1 → ketiga berkas belum dibuat (clone baru, daemon belum pernah jalan).
    Panel harus tetap menampilkan SEMUA pair yang dipindai beserta alasannya, bukan blok yang hilang.

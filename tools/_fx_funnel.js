@@ -112,7 +112,8 @@ for (const pair of PAIRS) {
      atrP tidak bergantung biaya, jadi ini bisa dihitung ulang dari rekaman yang sama. */
   const atr = rec.map(s => s.f.atrP);
   console.log('  bila BIAYA (pips round-trip) diturunkan, eval dalam sesi yang lolos ATR/biaya ' + mode.minCost + '×:');
-  for (const c of [P.typSpread, 3, 2.5, 2, 1.5, 1, 0.7]) {
+  const costs = Array.from(new Set([P.typSpread, 3, 2.5, 2, 1.5, 1, 0.7])).sort((a, b) => b - a);
+  for (const c of costs) {
     const n = atr.filter(v => v >= mode.minCost * c).length;
     console.log('   biaya ' + c.toFixed(1).padStart(4) + ' pips → ' + String(n).padStart(7) + ' eval (' + ((n / Math.max(1, atr.length)) * 100).toFixed(2).padStart(6) + '%)' +
       (c === P.typSpread ? '   ← typSpread pair ini sekarang' : ''));

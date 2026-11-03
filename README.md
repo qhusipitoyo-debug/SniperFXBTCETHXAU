@@ -17,6 +17,27 @@ EUR/USD (Fiber) • USD/JPY (Gopher) • GBP/USD (Cable) • USD/CHF (Swissie) �
 
 Untuk USD/JPY, USD/CHF, USD/CAD, NZD/USD pakai **Deriv** (paling mudah, tanpa daftar), OANDA, atau Capital.com — Binance tidak punya pasangannya.
 
+## Mode scan (dropdown `MODE`)
+
+| mode | minScore | minER | minCost | persist | Catatan |
+|---|---|---|---|---|---|
+| `agresif` | 0,42 | 0,26 | 2,0 | 8 s | **default 3-11-2026**; paling longgar, untuk melihat sinyal. Bukan klaim edge. |
+| `balanced` | 0,48 | 0,32 | 3,5 | 20 s | titik awal walk-forward lama |
+| `precision` | 0,55 | 0,36 | 4,0 | 30 s | paling ketat |
+| `momentum` | 0,44 | 0,28 | 3,2 | 15 s | bobot mom lebih besar |
+| `liquidity` | 0,48 | 0,32 | 3,5 | 20 s | wajib ada order flow |
+| `auto` | 0,58 | 0,38 | 4,0 | 30 s | ambang tinggi |
+| `edge` | 0,65 | 0,42 | 4,5 | 40 s | paling ketat + cooldown panjang |
+
+`agresif` sengaja melewati `calib.modeFloor` (lantai EURUSD 4,0 / XAU 3,8 / ETH 4,0), kalau tidak
+mode ini langsung kembali ke ambang `balanced`. `minCost:2,0` ada di bawah pagar EA (25% ATR ⇒ 4,0),
+jadi sinyal dashboard bisa ditolak AUTO-ORDER saat spread nyata melebar. Untuk order otomatis,
+pakai `precision`/`auto` atau isi `PARAMS.COST_EXTRA_PIPS` sesuai akun.
+
+`typSpread` di `PAIRS[]` sekarang memakai pengukuran terminal 2-11-2026 + margin: major 1,2–1,5 pips,
+emas 3,0, BTC/ETH 20. Ini **asumsi**, bukan janji broker lain — edit sesuai akunmu. CSV lama tetap
+memakai spread lama, jadi replay lama masih konservatif.
+
 ## Jalankan
 
 Panel adalah berkas statis — satu server kecil di folder ini sudah cukup:
@@ -957,6 +978,34 @@ Masalah yang dilaporkan: pair yang lolos threshold hanya muncul sebentar lalu hi
 - **Statistik dalam R** (expectancy, total R, profit factor, max DD) menggantikan "win rate" yang menghitung TP1 sebagai menang. Posisi: 50% ditutup di TP1, SL ke BE, sisanya ke TP2 / time-stop 45 menit.
 - Storage key `fxSniper2` (riwayat lama tidak dimigrasi karena metriknya berbeda; saldo/risiko/offset MT5 dimigrasi).
 - Panel "probabilitas" kini **Direction Bias** (skor −1…+1) — angkanya memang tidak pernah probabilitas terkalibrasi.
+
+## Perubahan 3-11-2026 — kalibrasi biaya + mode `agresif`
+
+Pertanyaan yang dijawab: "kenapa tidak ada pair yang lolos + terkunci?" Jawabannya: **gerbang biaya,
+bukan sinyal.** `tools/_fx_funnel.js` (45 hari replay, mode balanced) menunjukkan evaluasi yang lolos
+SEMUA gerbang sekaligus: EURUSD 17 (0,013%), USDJPY 91 (0,071%), dan GBP/USD, USD/CHF, AUD/USD,
+USD/CAD, NZD/USD **0**. Gerbang `ATR/biaya` menolak 89,8–99,8% evaluasi. Dengan asumsi biaya lama
+2,8–4,5 pips, ATR(M15) major 3,6–8,2 pips tidak pernah mencapai `minCost` 3,5–4,0.
+
+Yang diubah (ini menggantikan keputusan 2-11-2026 "ukur dulu, belum dipasang"):
+
+- `PAIRS[].typSpread` major 2,8–4,5 → **1,2–1,5** pips; XAU 4,5 → **3,0**; BTC/ETH tetap **20**.
+  Angka ini berasal dari pengukuran terminal 2-11-2026 (major 0,90–1,20; emas 2,50; BTC 19,65; ETH 19,30)
+  + margin kecil. Ini asumsi yang harus diedit kalau akunmu beda; `PARAMS.COST_EXTRA_PIPS` untuk komisi.
+- Mode baru **`agresif`**: `minScore .42`, `minER .26`, `minCost 2.0`, `persist 8 dtk`, `cooldown 8 mnt`.
+  Mode ini **melewati** `calib.modeFloor` (EURUSD 4,0 / XAU 3,8 / ETH 4,0) — kalau tidak, lantai itu
+  mengembalikannya ke balanced. Default UI sekarang `agresif` kalau belum ada pilihan tersimpan.
+- `minCost 2.0` sengaja di bawah pagar EA 4,0. Konsekuensinya: sinyal dashboard bisa muncul tapi
+  AUTO-ORDER ditolak EA saat spread nyata > 25% ATR. Untuk auto-order pakai `precision`/`auto`.
+
+Bukti frekuensi (replay 45 hari, data lama yang spread-nya masih 2,8–4,5 pips, jadi ini batas bawah):
+`agresif` fire 20× EURUSD, 5× GBPUSD, 25× USDJPY. Dengan biaya baru, probe `allPass` naik ke
+94–233 eval/pair (balanced) dan 264–815 eval/pair (agresif). **Ini bukan bukti edge** — hanya bukti
+bahwa ambang lama menahan sinyal karena asumsi biaya, bukan karena pasarnya tidak punya peluang.
+Replay CSV lama tetap konservatif (`costPips()` = `max(spread data, typSpread)`).
+
+Verifikasi: `scanner_test` 70/70, `bridge_test` 92/92, `bridge_http_test` 37/37, `ui_smoke`
+(balanced + agresif) 0 error runtime, `ea_sim` 11 langkah.
 
 ## Catatan jujur
 

@@ -47,36 +47,36 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
              memang mau dipakai sebagai pembatas risiko, bukan sebagai sumber edge.
            - FX major: TIDAK ada dasar data sama sekali. tools/_fx_funnel.js: gerbang ATR/biaya menolak 89,8–100,0%
              evaluasi dalam sesi (AUD/CAD nol eval lolos), 35 hari → n=0–4 trade per pair. Isinya prior likuiditas
-             (London/NY), dan selama `typSpread` retail bertahan daftar ini tidak mengubah perilaku apa pun
-             karena mesin tidak pernah fire di jam mana pun.
+             (London/NY); setelah typSpread dikalibrasi 3-11-2026 ia tetap tidak memblokir entry.
    calib = override opsional per pair (params + modeFloor). modeFloor = lantai ambang (Math.max dengan mode).
            STATUS per 2-11-2026 (tools/_floor_oos.js, floor diuji dengan hours=null): floor yang menang di TRAIN
            membuat TEST memburuk (XAU −0,010→−0,050 R/trade, 36 trade jadi 17) dan prosedur jujur justru memilih
            nilai lain (XAU lebih ketat, ETH = default balanced, EUR nol kandidat). Dipertahankan atas keputusan
            operator sebagai PENEBAT RISIKO berlabel, bukan sebagai kalibrasi yang terbukti menaikkan PF. */
 const PAIRS={
-  /* typSpread = biaya ASUMSI broker ritel yang dipakai gerbang ATR/biaya, BUKAN spread hasil rekaman:
-     komentar lama menyebutnya "diukur dari sniper_status.txt", dan itu tidak bisa dibuktikan — file
-     data/*_1m.csv justru menuliskan spread = typSpread (tools/fetch_deriv.js:62), jadi angkanya
-     memantul balik. Pengukuran nyata pertama ada 2-11-2026 (tools/_spread_measure.js --akun=180 pada
-     terminal hidup, 181 baris status): akun FBS-Real membayar 0,90–1,20 pips untuk tujuh major dan
-     2,50 pips untuk emas vs asumsi 2,80–4,50 — yaitu 3–5× TERLALU KETAT di major, 1,0× untuk crypto
-     (BTC 19,65 / ETH 19,30 vs asumsi 20). Angkanya TIDAK dipasang ke sini: keputusan operator
-     "ukur dulu, belum dipasang", dan satu jendela 180 detik bukan distribusi. Angka lama (EUR 1.0 pip)
-     pernah membuat audit biaya lolos palsu lalu rugi di eksekusi — itu sebabnya lantainya tinggi. */
-  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:2.8,sess:[7,16],
+  /* typSpread = biaya ASUMSI broker ritel yang dipakai gerbang ATR/biaya, BUKAN spread hasil rekaman.
+     Sejak 3-11-2026 angka ini DIPASANG dari pengukuran terminal hidup (tools/_spread_measure.js --akun=180,
+     181 baris status, akun FBS-Real): tujuh major 0,90–1,20 pips, emas 2,50, BTC 19,65, ETH 19,30.
+     Nilai di bawah = batas atas pengukuran + margin kecil (major 1,2–1,5; emas 3,0; crypto 20) supaya
+     lonjakan spread sesaat tidak langsung membunuh sinyal. Ini BUKAN janji spread broker lain: EDIT
+     angka ini sesuai akunmu (akun raw/commission → isi juga PARAMS.COST_EXTRA_PIPS).
+     Catatan replay: data/*_1m.csv yang sudah ada menuliskan spread = typSpread LAMA, jadi backtest lama
+     tetap konservatif karena costPips() memakai Math.max(spread data, typSpread baru). Kalau CSV dibuat
+     ulang dengan tools/fetch_deriv.js, spread ikut angka baru — benar untuk akun dengan spread baru,
+     tapi bukan pembanding apple-to-apple dengan hasil lama. */
+  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:1.2,sess:[7,16],
     hours:[7,8,9,10,11,12,13,14,15], calib:{modeFloor:{minCost:4.0}}, binance:'eurusdt',deriv:'frxEURUSD'},
-  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:4.0,sess:[0,16],
+  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.5,sess:[0,16],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxUSDJPY'},
-  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[7,16],
+  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[7,16],
     hours:[7,8,9,10,11,12,13,14,15], binance:null,deriv:'frxGBPUSD'},
-  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[7,16],
+  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[7,16],
     hours:[7,8,9,12,13,14,15], binance:null,deriv:'frxUSDCHF'},
-  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.5,sess:[0,16],
+  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[0,16],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxAUDUSD'},
-  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:4.5,sess:[12,20],
+  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[12,20],
     hours:[12,13,14,15,16,17,18,19], binance:null,deriv:'frxUSDCAD'},
-  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:4.0,sess:[0,16],
+  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[0,16],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxNZDUSD'},
   /* --- Emas & crypto. pip: XAU 0.1, BTC 1, ETH 0.1. units = kontrak/lot di FBS (cek spesifikasi).
      typSpread BTC/ETH mengikuti poin broker (≈19–20 pip). h24 = tidak kena weekend FX.
@@ -87,7 +87,7 @@ const PAIRS={
                   justru memberi avgR −0,102 di TEST. Baris "shipped" yang bagus di TEST = kebocoran.
        ETH 45h: tidak ada jam dengan n≥6 → tidak ada dasar; modeFloor juga in-sample dan memperkecil n.
      EUR major: edge arah belum ada di data (signal_test: −0,022 ATR p=0,184; n=0 trade di sumber Deriv). */
-  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:4.5,sess:[7,16],
+  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:3.0,sess:[7,16],
     hours:[7,8,10,11,13,15], calib:{modeFloor:{minScore:.50,minER:.33,minCost:3.8}},
     binance:'paxgusdt',deriv:'frxXAUUSD'},
   BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:20, sess:[0,24],
@@ -136,11 +136,25 @@ const PARAMS={
 const MODES={
   precision:{minScore:.55,minER:.36,minCost:4.0,persist:30000,cooldown:25*60000},
   balanced: {minScore:.48,minER:.32,minCost:3.5,persist:20000,cooldown:15*60000},
+  /* agresif = mode eksplisit "ingin melihat sinyal", BUKAN mode yang lebih terbukti. Ambang lebih
+     longgar + konfirmasi 8 dtk. minCost 2.0 sengaja di bawah pagar EA 4.0: sinyal dashboard tetap
+     informatif, tapi AUTO-ORDER bisa menolaknya saat spread nyata > 25% ATR. Baca docs/ANALISIS.md. */
+  agresif:  {minScore:.42,minER:.26,minCost:2.0,persist:8000,cooldown:8*60000},
   momentum: {minScore:.44,minER:.28,minCost:3.2,persist:15000,cooldown:12*60000,w:{mom:.55,trend:.30,brk:.10,flow:.10}},
   liquidity:{minScore:.48,minER:.32,minCost:3.5,persist:20000,cooldown:18*60000,needFlow:true},
   auto:     {minScore:.58,minER:.38,minCost:4.0,persist:30000,cooldown:30*60000},
   edge:     {minScore:.65,minER:.42,minCost:4.5,persist:40000,cooldown:45*60000}
 };
+
+/* modeFloor = lantai risiko per pair. Mode `agresif` sengaja melewatinya: lantai EURUSD 4.0 /
+   XAU 3.8 / ETH 4.0 akan mengembalikan mode longgar ini ke ambang balanced dan seluruh maksudnya hilang. */
+function applyModeFloor(mode,cal,modeName){
+  if(modeName==='agresif'||!cal||!cal.modeFloor)return mode;
+  for(const k of Object.keys(cal.modeFloor)){
+    const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v);
+  }
+  return mode;
+}
 
 /* Bursa FX tutup: akhir pekan (Jumat 22:00 UTC → Minggu 22:00 UTC) plus hari libur bursa
    bertanggal tetap. Yang bergerak (Good Friday, Easter Monday, bank holiday) tidak bisa
@@ -216,9 +230,7 @@ function create(pairKey,opts){
   let modeName=opts.mode||'balanced';
   let mode=Object.assign({},MODES[modeName]||MODES.balanced);
   /* modeFloor = lantai per pair (tidak melonggarkan mode ketat seperti edge/auto). */
-  if(cal.modeFloor){for(const k of Object.keys(cal.modeFloor)){
-    const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v);
-  }}
+  applyModeFloor(mode,cal,modeName);
   if(opts.modeOverride)mode=Object.assign(mode,opts.modeOverride);
   const stale=opts.stale||15000, hasFlow=!!opts.hasFlow, feed=opts.feed||'';
   const rd=v=>Number(Number(v).toFixed(P.dp));
@@ -517,7 +529,7 @@ function create(pairKey,opts){
        supaya sinyal yang sama bisa diminta kembali dengan harga tick terbaru. */
     rearm:id=>{if(trade&&trade.id===id){trade=null;lastEntry=0;cand.prog=0;cand.bleed=0}},
     setMode:n=>{if(MODES[n]){modeName=n;mode=Object.assign({},MODES[n]);
-      if(cal.modeFloor){for(const k of Object.keys(cal.modeFloor)){const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v)}}
+      applyModeFloor(mode,cal,n);
       if(opts.modeOverride)Object.assign(mode,opts.modeOverride)}},
     modeCfg:()=>mode,params:()=>prm,pair:()=>P,
     get trade(){return trade},get closed(){return closed},get dayR(){return dayR.r}
