@@ -290,6 +290,152 @@ function buildEngines(keys){
 }
 
 let feedClosedAt=null;   // status bursa saat feed terakhir dilanggan — kalau berbalik (Jumat 22:00 / Minggu 22:00 / libur) feed disusun ulang
+/* ---------- berita dinamis dari kalender (sumber: aiterminaltrading) ---------- */
+const NEWS_CAL_URL='https://pitoyict13-droid.github.io/aiterminaltrading/data/calendar.json';
+const NEWS_FAIRECONOMY=['https://nfs.faireconomy.media/ff_calendar_thisweek.json','https://nfs.faireconomy.media/ff_calendar_nextweek.json'];
+let NEWS_EVENTS=[];
+let NEWS_LAST_FETCH=0;
+const NEWS_REFRESH_MS=15*60*1000;
+
+function newsCountryCode(c){
+  const u=String(c||'').trim().toUpperCase();
+  return ({'UNITED STATES':'USD','US':'USD','USA':'USD','CANADA':'CAD','CA':'CAD','EUROZONE':'EUR','EURO AREA':'EUR','UK':'GBP','UNITED KINGDOM':'GBP','JAPAN':'JPY','AUSTRALIA':'AUD','NEW ZEALAND':'NZD'}[u]||u);
+}
+function newsNum(v){
+  if(v===null||v===undefined||String(v).trim()===''||v==='-'||v==='—')return null;
+  const raw=String(v).trim().replace(/,/g,'');
+  const m=raw.match(/^([+-]?\d*\.?\d+)\s*([KMB])?%?$/i);
+  let n; let suf='';
+  if(m){n=Number(m[1]);suf=(m[2]||'').toUpperCase();}
+  else n=Number(raw.replace(/[^0-9.-]/g,''));
+  if(!Number.isFinite(n))return null;
+  if(suf==='K')n*=1e3; if(suf==='M')n*=1e6; if(suf==='B')n*=1e9;
+  return n;
+}
+function newsNormalize(e){
+  return {Date:e.Date||e.date, Event:e.Event||e.event||e.Category||'Economic release',
+    Country:newsCountryCode(e.Country||e.country), Importance:+e.Importance||+e.importance||1,
+    Forecast:e.Forecast||e.forecast||e.TEForecast||'', Previous:e.Previous||e.previous||'',
+    Actual:e.Actual||e.actual||''};
+}
+function newsAffectsPair(e,pair){
+  const c=newsCountryCode(e.Country);
+  if(c==='USD')return true; // USD memengaruhi semua pair USD-quoted + crypto + gold
+  const cur=({AUD:'AUDUSD',EUR:'EURUSD',GBP:'GBPUSD',JPY:'USDJPY',CHF:'USDCHF',CAD:'USDCAD',NZD:'NZDUSD'})[c];
+  if(!cur)return false;
+  if(pair==='XAUUSD'||pair==='BTCUSD'||pair==='ETHUSD')return c==='USD';
+  return cur===pair;
+}
+function newsGoldBias(name,surprise,country){
+  const laborSoft=/unemployment rate|unemployment|initial claims|continuing claims|jobless claims|jobless/.test(name);
+  const usdSoftIfHigh=/cpi|inflation|pce|pmi|ism|retail sales|consumer confidence|fed funds|interest rate|rate decision|jolts|durable goods|nonfarm payroll|non-farm payroll|nfp|payroll|gdp|adp|employment/.test(name);
+  if(country==='USD'){ if(laborSoft)return surprise>0; if(usdSoftIfHigh)return surprise<0; return null; }
+  if(laborSoft)return surprise<0; if(usdSoftIfHigh)return surprise>0; return null;
+}
+function newsAnalyze(e){
+  const name=String(e.Event||'').toLowerCase();
+  const country=newsCountryCode(e.Country);
+  const forecast=newsNum(e.Forecast); const actual=newsNum(e.Actual);
+  const impact=+e.Importance||1;
+  if(actual===null||forecast===null) return {dir:'wait',score:Math.max(35,48-impact*2),reason:'Butuh Actual & Forecast.'};
+  const surprise=actual-forecast;
+  const threshold=Math.max(Math.abs(forecast)*0.005,0.01);
+  if(Math.abs(surprise)<threshold) return {dir:'wait',score:45,reason:`Actual ${actual} vs Forecast ${forecast}: tidak ada surprise berarti.`};
+  const goldBullish=newsGoldBias(name,surprise,country);
+  if(goldBullish===null) return {dir:'wait',score:40,reason:`${name} tidak ada mapping dampak ke pasar.`};
+  const strength=Math.min(40,Math.round(Math.abs(surprise)/threshold*10));
+  const score=Math.min(95,Math.max(55,55+strength));
+  return {dir:goldBullish?'long':'short',score,reason:`Actual ${actual} vs Forecast ${forecast}. ${goldBullish?'Data '+country+' melemah untuk USD → bullish.':'Data '+country+' menguat untuk USD → bearish.'}`};
+}
+function mapGoldDirToPair(pair,goldDir){
+  if(pair.startsWith('USD')) return goldDir==='short'?'UP':'DOWN';
+  return goldDir==='long'?'UP':'DOWN';
+}
+function pairMid(pair){
+  const q=quotes[pair]; if(!q)return null;
+  const m=q.last||((q.bid&&q.ask)?(q.bid+q.ask)/2:0);
+  return m>0?m:null;
+}
+function newsSnapKey(e){ return 'fxSniperNewsSnap:'+String(e.Date)+'|'+String(e.Event); }
+function captureNewsSnapshot(e){
+  try{
+    if(localStorage.getItem(newsSnapKey(e))) return;
+    const t=new Date(e.Date).getTime(); if(!Number.isFinite(t))return;
+    const now=Date.now(); if(now>=t||t-now>3600000)return;
+    const prices={}; ALL_KEYS.forEach(k=>{const m=pairMid(k); if(m)prices[k]=m;});
+    if(!Object.keys(prices).length)return;
+    localStorage.setItem(newsSnapKey(e),JSON.stringify({prices,capturedAt:new Date(now).toISOString()}));
+  }catch(err){}
+}
+function newsSnapshot(e){
+  try{ const raw=localStorage.getItem(newsSnapKey(e)); if(raw) return JSON.parse(raw);}catch{}
+  return null;
+}
+function newsMomentum(e,pair){
+  const snap=newsSnapshot(e); if(!snap||!snap.prices||!snap.prices[pair])return null;
+  const base=snap.prices[pair]; const cur=pairMid(pair);
+  if(!base||!cur)return null;
+  const changePct=(cur-base)/base*100;
+  if(Math.abs(changePct)<0.1) return {dir:null,changePct,base};
+  return {dir:changePct>0?'long':'short',changePct,base};
+}
+function newsBias(pair,now){
+  if(!NEWS_EVENTS.length)return null;
+  const relevant=NEWS_EVENTS.filter(e=>newsAffectsPair(e,pair));
+  const cands=relevant.map(e=>({e,t:new Date(e.Date).getTime()})).filter(x=>Number.isFinite(x.t)&&x.e.Importance>=2).sort((a,b)=>a.t-b.t);
+  // released within 6h
+  const released=cands.filter(x=>x.t<=now&&now-x.t<=6*3600000);
+  if(released.length){
+    const pick=released[released.length-1];
+    const a=newsAnalyze(pick.e);
+    let dir=a.dir;
+    if(dir==='wait'||dir==='live'){
+      const mom=newsMomentum(pick.e,pair);
+      if(mom&&mom.dir)dir=mom.dir;
+    }
+    const until=new Date(pick.t+6*3600000);
+    if(dir==='long'||dir==='short'){
+      return {phase:'post',dir:mapGoldDirToPair(pair,dir),impact:pick.e.Importance,event:pick.e.Event,until,score:a.score};
+    }
+    return {phase:'post',dir:null,impact:pick.e.Importance,event:pick.e.Event,until,score:a.score};
+  }
+  // pre-news within 15 min
+  const upcoming=cands.filter(x=>x.t>now&&x.t-now<=15*60000);
+  if(upcoming.length){
+    const u=upcoming[0];
+    return {phase:'pre',dir:null,impact:u.e.Importance,event:u.e.Event,until:new Date(u.t)};
+  }
+  return null;
+}
+async function refreshNews(){
+  NEWS_LAST_FETCH=Date.now();
+  let raw=[];
+  try{
+    const r=await fetch(NEWS_CAL_URL+'?v='+Date.now(),{cache:'no-store'});
+    if(r.ok){const j=await r.json(); raw=Array.isArray(j)?j:(j.events||[]);}
+  }catch(e){console.warn('[news] kalender gagal',e);}
+  if(!raw.length){
+    try{
+      const batches=await Promise.all(NEWS_FAIRECONOMY.map(async u=>{const r=await fetch(u,{cache:'no-store'});return r.ok?r.json():[];}));
+      const rank={Low:1,Medium:2,High:3};
+      const keywords=/fed|fomc|interest rate|inflation|cpi|pce|payroll|employment|unemployment|jobless|gdp|pmi|ism|retail sales|consumer confidence|jolts|durable goods|powell/i;
+      const allowed=['USD','EUR','GBP','JPY','AUD','NZD','CAD'];
+      raw=batches.flat().filter(e=>allowed.includes(String(e.country||'').toUpperCase())&&keywords.test(e.title||'')).map(e=>({
+        Date:e.date,Event:e.title,Country:e.country,Importance:rank[e.impact]||1,
+        Forecast:e.forecast||'',Previous:e.previous||'',Actual:e.actual||''}));
+    }catch(e){console.warn('[news] fallback gagal',e);}
+  }
+  NEWS_EVENTS=raw.map(newsNormalize).filter(e=>e.Date&&!isNaN(new Date(e.Date)));
+  try{ E.setNewsProvider((pair,now)=>newsBias(pair,now)); }catch(e){}
+  // capture pre-news snapshots for upcoming events
+  NEWS_EVENTS.forEach(captureNewsSnapshot);
+  console.log('[news] loaded',NEWS_EVENTS.length,'events');
+}
+function newsTick(){
+  NEWS_EVENTS.forEach(captureNewsSnapshot);
+}
+if(typeof setInterval!=='undefined'){ setInterval(newsTick,30000); setInterval(()=>{ if(Date.now()-NEWS_LAST_FETCH>NEWS_REFRESH_MS) refreshNews(); },60000); }
+
 function startFeed(){
   if(stopFeed){try{stopFeed()}catch{}stopFeed=null}
   clearFeedHelpers();
@@ -1010,6 +1156,7 @@ function focusPair(pair){
   console.log('[app] boot multi-scanner');
   await loadCalibration();
   initPlanInputs();
+  refreshNews();
   startFeed();
   render();
   renderPairStats();

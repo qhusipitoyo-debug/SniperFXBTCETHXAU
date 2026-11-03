@@ -36,6 +36,10 @@
 (function(root){
 'use strict';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+/* Hook berita dinamis: app.js mendaftarkan provider yang mengembalikan
+   {phase:'pre'|'post', dir:'UP'|'DOWN'|null, impact, event, until} atau null.
+   Engine hanya MEMBACA; tidak fetch. Null = tidak ada konteks berita. */
+let _newsProvider=null;
 
 /* pip, dp, quoteUSD, maxSpread (pips, batas ENTRY), typSpread (pips, biaya asumsi broker retail — EDIT sesuai akun MT5-mu),
    sess = jendela jam UTC [mulai,akhir) fallback ENTRY,
@@ -423,8 +427,11 @@ function create(pairKey,opts){
     else if(newsWindow(now)){const w=newsWindow(now);hard='Jendela berita '+String(Math.floor(w[0]/60)).padStart(2,'0')+':'+String(w[0]%60).padStart(2,'0')+'–'+String(Math.floor(w[1]/60)).padStart(2,'0')+':'+String(w[1]%60).padStart(2,'0')+' UTC'}
     else if(!inSess(now))hard='Di luar sesi ('+sessionLabel(pairKey)+')';
     const priorOut=outsidePrior(pairKey,now);
+    /* Konteks berita dinamis (jika provider terdaftar). */
+    const nb=(typeof _newsProvider==='function')?_newsProvider(pairKey,now):null;
     let blocked='';
     if(trade)blocked='Plan aktif '+trade.side+' @ '+trade.entry+' — tunggu selesai';
+    else if(nb&&nb.phase==='pre'&&(nb.impact||0)>=2)blocked='Menjelang rilis: '+(nb.event||'news')+' — straddle, tunggu konfirmasi';
     else if(dayLoss)blocked='Batas rugi harian '+prm.MAX_DAILY_LOSS_R+'R tercapai';
     else if(now<cdUntil)blocked='Cooldown '+Math.ceil((cdUntil-now)/60000)+' mnt';
     out.hard=hard;out.blocked=blocked;
@@ -453,7 +460,8 @@ function create(pairKey,opts){
       {g:le(retrace,prm.MAX_RETRACE_ATR),t:'Retrace '+retrace.toFixed(1)+'×ATR dari ekstrem 3m — momentum melemah'},
       {g:bi(!si.tooFar),t:'SL swing '+si.xAtr.toFixed(1)+'×ATR > '+prm.SL_MAX_ATR+'× — invalidasi terlalu jauh'},
       {g:le(spreadPips,P.maxSpread),t:'Spread '+spreadPips.toFixed(1)+' pips > maks '+P.maxSpread},
-      {g:le(volRatio,prm.SPIKE_MAX),t:'Lonjakan volatilitas ×'+volRatio.toFixed(1)+' (hindari saat berita)'}
+      {g:le(volRatio,prm.SPIKE_MAX),t:'Lonjakan volatilitas ×'+volRatio.toFixed(1)+' (hindari saat berita)'},
+      {g:bi(!nb||!nb.dir||nb.dir===side),t:'Berita: '+(nb&&nb.event?nb.event:'news')+' menunjukkan arah berlawanan ('+(nb&&nb.dir?nb.dir:'')+')'}
     ];
     const failed=gates.filter(x=>!x.g.s),sigOK=!failed.length,hardOK=gates.every(x=>x.g.h);
     const coreOK=Math.sign(mom)===d&&Math.sign(trend)===d&&brk>=prm.BRK_FLOOR;
@@ -476,7 +484,7 @@ function create(pairKey,opts){
       cand.bleed+=dt;
       if(cand.bleed>prm.CONFIRM_GRACE)cand.prog=Math.max(0,cand.prog-dt*prm.BLEED_DECAY);
     }else{cand.prog=0;cand.bleed=0}
-    out.prog=cand.prog;out.sigOK=sigOK;out.qualified=cand.prog>0||sigOK;
+    out.prog=cand.prog;out.sigOK=sigOK;out.qualified=cand.prog>0||sigOK;out.news=nb;
     /* berapa gerbang (soft) yang lolos saat ini — dipakai panel untuk menampilkan kemajuan
        hidup (0..14) meskipun belum satu pun kandidat yang terkunci. Bukan sinyal, hanya ukuran. */
     out.gatesPassed=gates.length-failed.length;out.gatesTotal=gates.length;
@@ -539,6 +547,6 @@ function create(pairKey,opts){
   };
 }
 
-const API={PAIRS,PARAMS,MODES,create,summarize,closedFX,isClosed,inSession,outsidePrior,sessionLabel,H24_KEYS:Object.keys(PAIRS).filter(k=>PAIRS[k].h24),FX_HOLIDAYS:[...FX_HOLIDAYS].sort()};
+const API={PAIRS,PARAMS,MODES,create,summarize,closedFX,isClosed,inSession,outsidePrior,sessionLabel,H24_KEYS:Object.keys(PAIRS).filter(k=>PAIRS[k].h24),FX_HOLIDAYS:[...FX_HOLIDAYS].sort(),setNewsProvider:fn=>{_newsProvider=fn}};
 if(typeof module!=='undefined'&&module.exports)module.exports=API;else root.FXEngine=API;
 })(typeof window!=='undefined'?window:globalThis);
