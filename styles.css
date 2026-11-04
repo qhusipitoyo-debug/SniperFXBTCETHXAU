@@ -148,3 +148,8 @@
 .statChip.marginal{color:#8fd7e8;border-color:rgba(143,215,232,.30);background:rgba(84,140,255,.10)}
 .statChip.bad{color:#ff8d9d;border-color:rgba(255,141,157,.30);background:rgba(255,110,130,.10)}
 .statChip.thin,.statChip.none{color:#ffd479;border-color:rgba(255,212,121,.32);background:rgba(255,180,70,.10)}
+
+.heroStatus{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:#111823;border:1px solid #263242;color:#9ca7b6;font-size:8px;font-weight:900;letter-spacing:.25px;white-space:nowrap}
+.heroStatus.live{color:#74f0a0;border-color:rgba(116,240,160,.30);background:rgba(52,211,153,.08)}
+.heroStatus.warn{color:#ffd479;border-color:rgba(255,212,121,.30);background:rgba(255,180,70,.08)}
+@media(max-width:650px){.heroStatus{display:flex;margin-top:8px;white-space:normal}}

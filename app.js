@@ -18,6 +18,7 @@ const AITERM_BASE='https://pitoyict13-droid.github.io/aiterminaltrading';
 const AITERM_URL=AITERM_BASE+'/data/markets.json';
 const AITERM_REFRESH_MS=60*1000;
 const AITERM_STALE_MS=20*60*1000;
+const AITERM_INTERVAL_MS=15*60*1000;
 const FEEDS={aiterminaltrading:{label:'aiterminaltrading',short:'AITERM',stale:AITERM_STALE_MS,flow:false}};
 let AITERM_META={generatedAt:null,staleAfterSec:1800,pairs:{}};
 const _qs=new URLSearchParams(location.search);
@@ -613,6 +614,17 @@ function whyEmptyHtml(rows){
     `<div class="whyNote">Terdekat: <b>${esc(best.c.name)}</b> — KEKUATAN ${best.x.side==='UP'?Math.round((best.x.upProbability||.5)*100):Math.round((best.x.downProbability||.5)*100)}% (arah BUY/SELL saat ini, bergerak) · KUNCI ${best.pctv}% dari ${Math.round(best.persist/1000)} detik countdown · gerbang ${Number.isFinite(best.x.gatesPassed)?best.x.gatesPassed:0}/${Number.isFinite(best.x.gatesTotal)?best.x.gatesTotal:14}. Angka KEKUATAN bukan sinyal: ia tetap terkunci hanya kalau SELURUH gerbang lolos BERSAMAAN dan bertahan sampai 100%; satu gerbang kedip = countdown berhenti. Tidak ada threshold yang diturunkan untuk memaksanya.</div>`:'';  return `<div class="whyEmpty"><div class="whyNote">0 kartu ENTRY/SETUP — feed hidup (${rows.length} pair jalan), yang menahan adalah gerbang ini. Baris diurutkan dari yang paling dekat ke TERKUNCI.</div><div class="whyNote"><b>KEKUATAN</b> = arah BUY/SELL saat ini (bergerak tiap evaluasi — bukan sinyal, bukan lock). <b>KUNCI</b> = countdown lock (0% kalau belum semua gerbang lolos bersamaan). <b>gerbang X/14</b> = berapa gerbang soft yang lolos saat ini.</div>${head}${body}${hint}</div>`;
 }
 
+/* Snapshot aiterminaltrading refresh tiap 15 menit. Menunjukkan usia data dan update berikutnya. */
+function aitermSnapshotHtml(now){
+  const t=Date.parse(AITERM_META&&AITERM_META.generatedAt||'');
+  if(!Number.isFinite(t)) return '<span class="heroStatus warn">Snapshot aiterminaltrading menunggu data…</span>';
+  const ageMin=Math.max(0,Math.floor((now-t)/60000));
+  const next=new Date(Math.ceil(now/AITERM_INTERVAL_MS)*AITERM_INTERVAL_MS);
+  const nextMin=Math.max(0,Math.ceil((next.getTime()-now)/60000));
+  const cls=(now-t)>AITERM_STALE_MS?'warn':'live';
+  return '<span class="heroStatus '+cls+'">Snapshot aiterminaltrading '+ageMin+' mnt lalu · update berikutnya ±'+nextMin+' mnt lagi</span>';
+}
+
 /* ---------- main render ---------- */function render(){
   try{
     const now=Date.now();
@@ -707,6 +719,7 @@ function whyEmptyHtml(rows){
     const warn=S.n<30?' • Sampel '+S.n+'/30':'';
     safeHTML('recentResults','<span class="historyEmpty">'+(feedNote||'Informational only')+warn+' • AITERM = '+scanKeys().length+' pair'+'</span>');
     safeText('status',live?('LIVE multi · '+live+'/'+keys.length+' · '+caps().short+' · '+fmtTime(now)):('WAITING FEED'+(feedNote?' — '+feedNote:'')+(fxClosed()?' • MARKET CLOSED':'')));
+    safeHTML('aitermSnapshot', aitermSnapshotHtml(now));
   }catch(err){console.error('render',err&&err.stack||err)}
 }
 
