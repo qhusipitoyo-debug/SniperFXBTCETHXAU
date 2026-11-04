@@ -12,25 +12,20 @@ if(!E)console.error('engine.js belum termuat');
 
 const STORE='fxSniper2';
 const PAIRS=E.PAIRS;
-for(const k in PAIRS)PAIRS[k].deriv=PAIRS[k].deriv||'frx'+k;
 const ALL_KEYS=Object.keys(PAIRS);
 
-const FEEDS={
-  binance:{label:'Binance (USDT)',short:'BINANCE',stale:12000,flow:true},
-  deriv:  {label:'Deriv (publik)', short:'DERIV',  stale:20000,flow:false},
-  oanda:  {label:'OANDA',          short:'OANDA',  stale:15000,flow:false},
-  capital:{label:'Capital.com',    short:'CAPITAL',stale:15000,flow:false}
-};
-const DERIV_WS='wss://api.derivws.com/trading/v1/options/ws/public';
-const BINANCE_WS_HOSTS=['wss://stream.binance.com','wss://stream.binance.com:9443','wss://data-stream.binance.vision'];
-const BINANCE_REST_HOSTS=['https://api.binance.com','https://data-api.binance.vision'];
+const AITERM_BASE='https://pitoyict13-droid.github.io/aiterminaltrading';
+const AITERM_URL=AITERM_BASE+'/data/markets.json';
+const AITERM_REFRESH_MS=60*1000;
+const AITERM_STALE_MS=20*60*1000;
+const FEEDS={aiterminaltrading:{label:'aiterminaltrading',short:'AITERM',stale:AITERM_STALE_MS,flow:false}};
+let AITERM_META={generatedAt:null,staleAfterSec:1800,pairs:{}};
 const _qs=new URLSearchParams(location.search);
-const PROXY_URL=_qs.get('proxy')||'ws://127.0.0.1:8787';
 const lsGet=k=>{try{return localStorage.getItem(k)}catch{return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 const normPair=q=>String(q||'').toUpperCase().replace(/[^A-Z]/g,'');
 
-let selectedFeed=(()=>{const q=_qs.get('feed')||lsGet('fxSniperFeed');return FEEDS[q]?q:(q==='binance'?'binance':'deriv')})();
+let selectedFeed='aiterminaltrading';
 let selectedPair=(()=>{const q=normPair(_qs.get('pair')||lsGet('fxSniperPair'));return PAIRS[q]?q:'EURUSD'})();
 let selectedMode=(()=>{const q=_qs.get('mode')||lsGet('fxSniperMode');return (E.MODES&&E.MODES[q])?q:'agresif'})();
 let scanFilter=(()=>{const q=_qs.get('filter')||lsGet('fxSniperFilter');return ['action','threshold','all'].includes(q)?q:'action'})();
@@ -40,9 +35,21 @@ const quotes={};           // pair -> {bid,ask,last,ts}
 const signalStates={};     // pair -> UI signal state
 const plans={};            // pair -> locked plan (or null)
 const chartPtsBy={};       // pair -> chart points
+const chartSeedBy={};      // pair -> markets.json generatedAt used to seed the chart
+function seedChartPair(pair,bars,generatedAt){
+  if(!QbarsArray(bars))return;
+  if(chartSeedBy[pair]===generatedAt)return;
+  const pts=bars
+    .filter(b=>Number.isFinite(Number(b.c))&&Number(b.c)>0&&Number.isFinite(Number(b.k)))
+    .map(b=>({ts:Number(b.k)*60000,p:Number(b.c)}));
+  if(!pts.length)return;
+  chartPtsBy[pair]=pts;
+  chartSeedBy[pair]=generatedAt;
+}
+function QbarsArray(v){return Array.isArray(v);}
 const rec=[];              // export ticks: [ts,pair,bid,ask]
 let lastRec=0,feedNote='',stopFeed=null;
-let restPollTimer=null,feedWatchTimer=null,binanceHostIdx=0,lastWsMsg=0;
+let restPollTimer=null,feedWatchTimer=null,lastWsMsg=0;
 let storedEntries=[],historyEntries=[];
 let settings={balance:1000,riskPct:1};
 let planText='';
@@ -53,15 +60,10 @@ const EP=E.PARAMS, TP1_R=EP.TP1_R, TP2_R=EP.TP2_R, PLAN_TTL=EP.PLAN_TTL, MAX_DRI
 const LATCH_MS=30000;      // berapa lama kandidat/ENTRY tetap tampil saat skor kedip sesaat
 const boardSig={};         // id -> signature HTML terakhir, supaya board tidak dibangun ulang tiap 500ms
 
-const caps=()=>FEEDS[selectedFeed]||FEEDS.deriv;
+const caps=()=>FEEDS.aiterminaltrading;
 const pairCfg=k=>PAIRS[k||selectedPair]||PAIRS.EURUSD;
 const fxClosed=()=>E.closedFX(Date.now());
-const scanKeys=()=>{
-  const base=selectedFeed==='binance'?ALL_KEYS.filter(k=>PAIRS[k].binance):ALL_KEYS;
-  if(!fxClosed())return base;
-  const only=base.filter(k=>PAIRS[k].h24);
-  return only.length?only:base;   // feed tanpa pasangan 24/7 (OANDA/Capital) → tetap tampil, statusnya yang bilang tutup
-};
+const scanKeys=()=>ALL_KEYS;
 const fmtPct=v=>`${N(v)>=0?'+':''}${(N(v)*100).toFixed(3)}%`;
 const sgn=(v,d=2)=>`${N(v)>=0?'+':''}${N(v).toFixed(d)}`;
 const fmtR=v=>v==null?'—':sgn(v,2)+'R';
@@ -124,162 +126,63 @@ function handleEvents(pair,evs){
   if(closed)renderPairStats();
 }
 
-function seedEng(eng,bars){
-  try{const n=eng?eng.seedBars(bars):0;if(n)console.log('[prefill]',eng.pair&&eng.pair().name,n,'bar')}catch(e){console.warn('seed',e)}
+/* ---------- satu-satunya sumber market: aiterminaltrading ---------- */
+function asBars(bars){
+  return Array.isArray(bars)
+    ? bars.map(b=>({k:Number(b.k),o:N(b.o),h:N(b.h),l:N(b.l),c:N(b.c)}))
+        .filter(b=>[b.k,b.o,b.h,b.l,b.c].every(Number.isFinite) && b.o>0 && b.h>=b.l && b.c>0)
+        .sort((a,b)=>a.k-b.k)
+    : [];
 }
-
-/* berapa bar 1 menit yang perlu di-prefill agar engine langsung punya MIN_BARS bar sinyal */
-function needBars(pair){
-  const p=engines[pair]?engines[pair].params():E.PARAMS;
-  return Math.min(1000,(p.MIN_BARS+3)*(p.BAR_MIN||1));
-}
-async function prefillBinancePair(pair,sym){
-  const limit=needBars(pair);
-  for(const h of BINANCE_REST_HOSTS){
-    try{
-      const r=await fetch(h+'/api/v3/klines?symbol='+sym.toUpperCase()+'&interval=1m&limit='+limit);
-      if(!r.ok)continue;
-      const rows=await r.json();
-      seedEng(engines[pair],rows.map(k=>({k:Math.floor(k[0]/60000),o:N(k[1]),h:N(k[2]),l:N(k[3]),c:N(k[4])})));
-      return;
-    }catch{}
-  }
-}
-
-/* ---------- feeds (multi) ---------- */
-function startBinanceMulti(keys){
-  clearFeedHelpers();
-  binanceHostIdx=0;lastWsMsg=0;
-  const syms=keys.map(k=>PAIRS[k].binance).filter(Boolean);
-  let stopWs=null,dead=false;
-  const streams=syms.map(s=>s+'@bookTicker/'+s+'@trade').join('/');
-  const symToPair={};keys.forEach(k=>{if(PAIRS[k].binance)symToPair[PAIRS[k].binance]=k});
-
-  const connect=()=>{
-    if(dead)return;
-    if(stopWs){try{stopWs()}catch{}stopWs=null}
-    const host=BINANCE_WS_HOSTS[binanceHostIdx%BINANCE_WS_HOSTS.length];
-    const url=host+'/stream?streams='+streams;
-    console.log('[binance-multi] try',url);
-    stopWs=openWS(url,null,msg=>{
-      lastWsMsg=Date.now();
-      const stream=String(msg.stream||''),d=msg.data||msg,now=Date.now();
-      const m=stream.match(/^([a-z0-9]+)@/);
-      const sym=m?m[1]:String(d.s||'').toLowerCase();
-      const pair=symToPair[sym];if(!pair)return;
-      if(stream.endsWith('@bookTicker')||(d.b&&d.a&&d.e===undefined)){
-        feedNote='';ingestPair(pair,N(d.b),N(d.a),now);return;
-      }
-      if(stream.endsWith('@trade')||d.e==='trade'){
-        const q=N(d.q);if(engines[pair]&&q>0)engines[pair].addFlow(now,(d.m?-1:1)*q);
-      }
-    },'binance-multi');
-  };
-  connect();
-
-  // REST fallback semua pair
-  let host=0,inflight=false;
-  const poll=async()=>{
-    if(inflight)return;inflight=true;
-    try{
-      const h=BINANCE_REST_HOSTS[host%BINANCE_REST_HOSTS.length];
-      await Promise.all(syms.map(async sym=>{
-        try{
-          const r=await fetch(h+'/api/v3/ticker/bookTicker?symbol='+sym.toUpperCase(),{cache:'no-store'});
-          if(!r.ok)return;
-          const d=await r.json(),pair=symToPair[sym],q=quotes[pair];
-          if(!pair)return;
-          if(!q||Date.now()-q.ts>1500){
-            ingestPair(pair,N(d.bidPrice),N(d.askPrice),Date.now());
-            feedNote='Binance REST fallback';
-          }
-        }catch{}
-      }));
-    }catch{host++}finally{inflight=false}
-  };
-  restPollTimer=setInterval(poll,1000);poll();
-  keys.forEach(k=>prefillBinancePair(k,PAIRS[k].binance));
-
-  feedWatchTimer=setInterval(()=>{
-    if(dead)return;
-    const gap=Date.now()-lastWsMsg;
-    if(lastWsMsg&&gap<6000)return;
-    const anyFresh=keys.some(k=>quotes[k]&&Date.now()-quotes[k].ts<6000);
-    if(!lastWsMsg&&anyFresh)return;
-    binanceHostIdx=(binanceHostIdx+1)%BINANCE_WS_HOSTS.length;
-    feedNote='Binance WS failover #'+(binanceHostIdx+1);
-    connect();
-  },5000);
-
-  return()=>{dead=true;clearFeedHelpers();if(stopWs)try{stopWs()}catch{}};
-}
-
-function startDerivMulti(keys){
-  clearFeedHelpers();lastWsMsg=0;
-  const pendingHist=new Set();
-  let pingTimer=null;
-  const stopWs=openWS(DERIV_WS,ws=>{
-    /* Deriv memutus koneksi publik yang diam terlalu lama. Ping ringan tiap 20 dtk
-       mencegah close 1006 saat pasar sepi, tanpa menambah subscription. */
-    if(pingTimer)clearInterval(pingTimer);
-    pingTimer=setInterval(()=>{try{ws.send(JSON.stringify({ping:1}))}catch{}},20000);
-    keys.forEach(k=>{
-      const sym=PAIRS[k].deriv;
-      ws.send(JSON.stringify({ticks:sym,subscribe:1}));
-      pendingHist.add(sym);
-      ws.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,count:needBars(k),end:'latest',granularity:60,style:'candles'}));
+function loadAiterminaltrading(keys){
+  return fetch(AITERM_URL + '?v=' + Date.now(), {cache:'no-store'})
+    .then(r=>{
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(markets=>{
+      const generatedAt = Date.parse(markets && markets.generatedAt || '');
+      AITERM_META = markets || AITERM_META;
+      let found = 0;
+      keys.forEach(pair=>{
+        const item = markets && markets.pairs && markets.pairs[pair];
+        if (!item) return;
+        const price = N(item.price);
+        const bid = N(item.bid || price), ask = N(item.ask || price);
+        if (!(bid > 0 && ask > 0 && ask >= bid)) return;
+        const bars = asBars(item.bars);
+        if (engines[pair] && engines[pair].appendBars) engines[pair].appendBars(bars);
+        seedChartPair(pair, bars, markets && markets.generatedAt);
+        ingestPair(pair, bid, ask, Number.isFinite(generatedAt) ? generatedAt : Date.now());
+        found++;
+      });
+      if (!found) throw new Error('markets.json kosong');
+      feedNote = '';
+      console.log('[aiterm] loaded', found, 'pair', markets && markets.generatedAt);
+      return markets;
     });
-  },msg=>{
-    lastWsMsg=Date.now();
-    if(msg.candles&&msg.echo_req){
-      const sym=msg.echo_req.ticks_history||msg.echo_req.ticks;
-      const pair=keys.find(k=>PAIRS[k].deriv===sym);
-      if(pair){
-        pendingHist.delete(sym);
-        seedEng(engines[pair],(msg.candles||[]).map(c=>({k:Math.floor(N(c.epoch)/60),o:N(c.open),h:N(c.high),l:N(c.low),c:N(c.close)})));
-      }
-      return;
-    }
-    if(msg.error){feedNote='Deriv: '+String(msg.error.message||msg.error.code||'error');return}
-    const t=msg.tick;if(!t)return;
-    const pair=keys.find(k=>PAIRS[k].deriv===(t.symbol||''));
-    if(!pair)return;
-    let bid=N(t.bid),ask=N(t.ask),q=N(t.quote);
-    const now=t.epoch?N(t.epoch)*1000:Date.now();
-    if(!(bid>0&&ask>0)){
-      if(!(q>0))return;
-      const half=PAIRS[pair].pip*.4;bid=q-half;ask=q+half;
-      feedNote='Deriv quote — spread disimulasikan (typSpread dipakai untuk biaya)';
-    }else if(!pendingHist.size)feedNote='';
-    ingestPair(pair,bid,ask,now);
-  },'deriv-multi');
-
-  feedWatchTimer=setInterval(()=>{
-    if(!lastWsMsg||fxClosed())return;
-    if(Date.now()-lastWsMsg>Math.max(caps().stale*2,30000)){
-      feedNote='Deriv stale — reconnect…';
-      startFeed();
-    }
-  },10000);
-  return()=>{clearFeedHelpers();if(pingTimer)clearInterval(pingTimer);try{stopWs()}catch{}};
 }
-
-function startProxy(src){
+function startAiterminaltrading(keys){
   clearFeedHelpers();
-  return openWS(PROXY_URL.replace(/\/$/,'')+'/?src='+encodeURIComponent(src),null,msg=>{
-    if(msg.type==='status'){feedNote=String(msg.msg||'');return}
-    if(msg.type!=='tick')return;
-    const pair=msg.pair||selectedPair;
-    if(!PAIRS[pair])return;
-    feedNote='';ingestPair(pair,N(msg.bid),N(msg.ask),Date.now());
-  },src);
+  feedNote = ''; lastWsMsg = Date.now(); rec.length = 0; lastRec = 0;
+  ALL_KEYS.forEach(k => { quotes[k] = quotes[k] || {bid:0,ask:0,last:0,ts:0}; quotes[k].ts = 0; });
+  let busy = false;
+  const load = () => {
+    if (busy) return;
+    busy = true;
+    loadAiterminaltrading(keys)
+      .catch(e => { feedNote = 'AITERM: ' + ((e && e.message) || e); console.warn('[aiterm] load', e); })
+      .finally(() => { busy = false; });
+  };
+  load();
+  restPollTimer = setInterval(load, AITERM_REFRESH_MS);
+  return () => {};
 }
-
 function buildEngines(keys){
   Object.keys(engines).forEach(k=>delete engines[k]);
   const now=Date.now(),today=Math.floor(now/86400000);
   keys.forEach(pair=>{
-    const eng=E.create(pair,{mode:selectedMode,stale:caps().stale,hasFlow:!!caps().flow&&!!PAIRS[pair].binance&&selectedFeed==='binance',feed:selectedFeed});
+    const eng=E.create(pair,{mode:selectedMode,stale:caps().stale,hasFlow:false,feed:selectedFeed});
     const mine=storedEntries.filter(e=>e.pair===pair);
     eng.seed({now,lastEntry:mine.reduce((a,e)=>Math.max(a,e.generatedAt||0),0),
       dayR:mine.filter(e=>typeof e.resultR==='number'&&Math.floor((e.closedAt||0)/86400000)===today).reduce((a,e)=>a+e.resultR,0)});
@@ -444,12 +347,7 @@ function startFeed(){
   const keys=scanKeys();
   feedClosedAt=fxClosed();
   buildEngines(keys);
-  if(selectedFeed==='binance'){
-    if(!keys.length){feedNote='Binance tidak punya pair majors penuh — pilih DERIV';return}
-    stopFeed=startBinanceMulti(keys);
-  }else if(selectedFeed==='deriv')stopFeed=startDerivMulti(keys);
-  else stopFeed=startProxy(selectedFeed);
-  // pastikan pair fokus ada di scan set
+  stopFeed=startAiterminaltrading(keys);
   if(!keys.includes(selectedPair))selectedPair=keys[0]||'EURUSD';
   const ps=$('pairSelect');if(ps)ps.value=selectedPair;
 }
@@ -813,7 +711,7 @@ function whyEmptyHtml(rows){
     safeHTML('entryHistory',hist.length?hist.map(h=>'<div class="historyRow"><b>'+(h.pair||'')+' '+h.side+'</b><span>'+fmtTime(h.generatedAt)+'</span><span>'+(typeof h.resultR==='number'?(h.outcome+' • '+fmtR(h.resultR)):('BERJALAN'))+'</span></div>').join(''):'<div class="historyEmpty">Belum ada entry terkunci.</div>');
 
     const warn=S.n<30?' • Sampel '+S.n+'/30':'';
-    safeHTML('recentResults','<span class="historyEmpty">'+(feedNote||'Informational only')+warn+(selectedFeed==='binance'?' • Binance = '+scanKeys().length+' pair (USDT/PAXG)':' • Deriv = '+scanKeys().length+' pair')+'</span>');
+    safeHTML('recentResults','<span class="historyEmpty">'+(feedNote||'Informational only')+warn+' • AITERM = '+scanKeys().length+' pair'+'</span>');
     safeText('status',live?('LIVE multi · '+live+'/'+keys.length+' · '+caps().short+' · '+fmtTime(now)):('WAITING FEED'+(feedNote?' — '+feedNote:'')+(fxClosed()?' • MARKET CLOSED':'')));
   }catch(err){console.error('render',err&&err.stack||err)}
 }

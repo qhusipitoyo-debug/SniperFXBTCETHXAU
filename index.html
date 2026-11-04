@@ -9,14 +9,11 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner majors + XAU/BTC/ETH • analisis lokal, tanpa koneksi broker</p></div></div>
+  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner majors + XAU/BTC/ETH • harga dan history 1m dari aiterminaltrading</p></div></div>
   <div class="topActions">
     <div class="connection"><i id="binanceDot"></i><span id="feedLabel">FEED</span></div>
-    <select id="feedSelect">
-      <option value="deriv">DERIV (10 pair)</option>
-      <option value="binance">BINANCE (EUR/GBP/AUD + XAU/BTC/ETH)</option>
-      <option value="oanda">OANDA</option>
-      <option value="capital">CAPITAL.COM</option>
+    <select id="feedSelect" disabled aria-label="Satu-satunya sumber market">
+      <option value="aiterminaltrading">AITERMINALTRADING (10 pair)</option>
     </select>
     <select id="modeSelect">
       <option value="agresif" selected>AGRESIF (longgar)</option>
@@ -187,11 +184,11 @@
 </main>
 
 <footer>
-  <span>MULTI SCANNER v8 • scanner informational • semua dihitung lokal di halaman ini, tidak ada order dan tidak ada koneksi broker</span>
+  <span>MULTI SCANNER v9 • scanner informational • semua data market dari aiterminaltrading, dihitung lokal di halaman ini, tidak ada order dan tidak ada koneksi broker</span>
   <span><button id="exportTicks">Export ticks</button> <button id="clear">Clear history</button></span>
 </footer>
 
 <script src="engine.js?v=14"></script>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

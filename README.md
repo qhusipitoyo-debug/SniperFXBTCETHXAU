@@ -6,16 +6,24 @@ Dikonversi dari XAUUSD Sniper. Semua berjalan lokal di browser — scanner infor
 
 EUR/USD (Fiber) • USD/JPY (Gopher) • GBP/USD (Cable) • USD/CHF (Swissie) • AUD/USD (Aussie) • USD/CAD (Loonie) • NZD/USD (Kiwi)
 
-## Feed (dropdown kanan, atau `?feed=binance|oanda|capital`)
+## Feed (satu sumber saja: aiterminaltrading)
 
-| Feed | Perlu proxy? | Pair tersedia | Catatan |
-|---|---|---|---|
-| **Binance (USDT)** | Tidak | EUR/USD saja | `EURUSDT` punya buku order nyata. **`GBPUSDT` dan `AUDUSDT` sudah tidak bisa dipakai** — `bookTicker`-nya mengembalikan `0.00000000` untuk bid/ask, jadi tidak ada harga. Pair lain tidak ada pasangan USD-nya di Binance. |
-| **Deriv (publik)** | Tidak | Ketujuhnya | Tanpa akun/token: langsung ke `wss://api.derivws.com/trading/v1/options/ws/public`, symbol `frxEURUSD` dst. Hanya bid/ask (atau quote tunggal → spread disimulasikan 0.8 pips), 3 faktor. Tick lebih jarang dari Binance/broker. Pasar tutup di weekend. |
-| **OANDA** | Ya | Ketujuhnya | Harga broker asli (v20 practice gratis). Hanya bid/ask → 3 faktor (tick-rule). |
-| **Capital.com** | Ya | Ketujuhnya | Harga broker asli (demo gratis). Hanya bid/ask → 3 faktor. |
+Live page hanya membaca:
 
-Untuk USD/JPY, USD/CHF, USD/CAD, NZD/USD pakai **Deriv** (paling mudah, tanpa daftar), OANDA, atau Capital.com — Binance tidak punya pasangannya.
+`https://pitoyict13-droid.github.io/aiterminaltrading/data/markets.json`
+
+Payload ini dibuat oleh GitHub Actions di repo `aiterminaltrading` setiap 15 menit. Isi: XAU/USD, BTC/USD, ETH/USD dan seluruh pasangan FX di atas, plus history 1-menit Yahoo Finance. Tidak ada panggilan langsung ke Binance, Deriv, OANDA, Capital.com atau sumber lain di feed live.
+
+| Sumber di dalam aiterminaltrading | Pair | Peran |
+|---|---|---|
+| OANDA (TradingView) | seluruh major FX + crosses | harga spot saat ini |
+| gold-api | XAU/USD | harga spot saat ini |
+| Binance / CoinGecko | BTC/USD, ETH/USD | harga saat ini |
+| Yahoo Finance 1m | seluruh pair | history chart/ATR |
+
+`bid`/`ask` disintesis sama dengan harga spot; biaya tetap dihitung lewat `typSpread`. Data diperbarui setiap ±15 menit, jadi feed **bukan real-time tick** — chart/sinyal ikut snapshot yang sama dengan aiterminaltrading.
+
+Opsi feed lain sengaja tidak ditampilkan di UI live supaya tidak ada sumber market yang berbeda dengan aiterminaltrading.
 
 ## Mode scan (dropdown `MODE`)
 

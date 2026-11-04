@@ -519,6 +519,21 @@ function create(pairKey,opts){
 
   return{
     onTick,addFlow,evaluate,
+    /* Gabungkan bar 1 menit baru dari markets.json ke riwayat yang sudah ada,
+       tanpa membuat ulang engine dan tanpa memakai tick dummy. */
+    appendBars:bars=>{
+      const add=(Array.isArray(bars)?bars:[])
+        .filter(b=>b&&[b.k,b.o,b.h,b.l,b.c].every(v=>Number.isFinite(Number(v)))&&Number(b.o)>0&&Number(b.h)>=Number(b.l)&&Number(b.c)>0)
+        .map(b=>({k:Number(b.k),o:Number(b.o),h:Number(b.h),l:Number(b.l),c:Number(b.c)}))
+        .filter(b=>b.k>(m1.length?m1[m1.length-1].k:-Infinity))
+        .sort((a,b)=>a.k-b.k);
+      for(const b of add){
+        m1.push(b); if(m1.length>prm.BAR_CAP)m1.shift();
+        s1.push({t:b.k*60,c:b.o},{t:b.k*60+59,c:b.c});
+      }
+      const cut=s1.length?s1[s1.length-1].t-S1_KEEP:0; while(s1.length&&s1[0].t<cut)s1.shift();
+      return add.length;
+    },
     preview:side=>{const bars=barsOf(ts).bars,atr=Math.max(atrOf(bars,prm.ATR_N),.3*P.pip);return bars.length>=2?buildPlan(side,ts,atr):null},
     restoreTrade:tr=>{if(tr&&!tr.done)trade=tr},
     seedBars:bars=>{
