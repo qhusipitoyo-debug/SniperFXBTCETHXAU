@@ -25,6 +25,8 @@ Payload ini dibuat oleh GitHub Actions di repo `aiterminaltrading` setiap 15 men
 
 Opsi feed lain sengaja tidak ditampilkan di UI live supaya tidak ada sumber market yang berbeda dengan aiterminaltrading.
 
+Kartu PLAN SIAP menampilkan badge **STAT**: informasi statistik replay lama (n, winrate, avgR/PF) dengan tooltip yang menjelaskan sumber datanya. Badge ini hanya referensi; **tidak memblokir atau menyaring sinyal**. Data statistik lama bukan feed live aiterminaltrading dan harus diperlakukan sebagai bahan evaluasi, bukan jaminan.
+
 ## Mode scan (dropdown `MODE`)
 
 | mode | minScore | minER | minCost | persist | Catatan |

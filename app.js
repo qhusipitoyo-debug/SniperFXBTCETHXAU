@@ -460,6 +460,7 @@ function planCardHtml(pair,x,s,now){
       <span>mid ${mid}</span>
       <span>${age}</span>
     </div>
+    <div class="alertStat">${pairStatChip(pair)}</div>
     ${bar}
     <p class="alertReason">${s.reason||x.reason||''}</p>
     ${levels}
@@ -718,6 +719,19 @@ function whyEmptyHtml(rows){
    bukan duplikasi. Pair tanpa file data dicatat TANPA DATA — bukan 0 trade, karena 0 trade
    akan terbaca sebagai "jelek" padahal yang belum diuji adalah datanya. */
 const SAMPLE_MIN=30, PF_MIN=1.1;   // ambang yang sama dipakai backtest.js dan walkforward.js untuk "layak dipercaya"
+
+/* Badge saja: informasi statistik replay di kartu sinyal. Tidak menjadi filter/gerbang —
+   sinyal tetap tampil, operator yang menilai. Tooltip menegaskan sumbernya berbeda dari live feed. */
+function pairStatChip(pair){
+  const mode=(typeof selectedMode==='string'&&selectedMode)||'balanced';
+  const s=pairStats&&pairStats.pairs&&pairStats.pairs[pair]&&pairStats.pairs[pair].modes&&pairStats.pairs[pair].modes[mode];
+  if(!s||!s.n)return '<span class="statChip none" title="Belum ada hasil replay untuk pair dan mode ini.">STAT —</span>';
+  const v=verdictOf(s);
+  if(v.k==='none')return '<span class="statChip thin" title="Sampel replay di bawah '+SAMPLE_MIN+'; angka belum berarti.">SAMPEL '+s.n+'/'+SAMPLE_MIN+'</span>';
+  const wr=pc(s.winRate),avg=fmtR(s.avgR),pf=nf(s.pf);
+  return '<span class="statChip '+v.k+'" title="Statistik replay '+(pairStats.generatedAt?('('+new Date(pairStats.generatedAt).toLocaleString()+') '):'')+'berasal dari data/feed lama (PAXGUSDT/USDT & Deriv), bukan feed live aiterminaltrading. n='+s.n+', WR '+wr+', avgR '+avg+', PF '+pf+'. Informasi saja; tidak memblokir atau mengubah sinyal.">'+
+    v.t+' · n='+s.n+' · WR '+wr+'</span>';
+}
 let pairStats=null,pairStatsNote='';
 
 async function loadPairStats(){
@@ -730,6 +744,8 @@ async function loadPairStats(){
     pairStats=null;
     pairStatsNote='stats/pair_stats.json belum ada — buat sekali dengan <b>node tools/pair_stats.js</b> (±20 menit, semua pair × semua mode; satu mode ±3 menit).';
   }
+  /* Chip statistik dirender dari data yang sama; gambar ulang setelah stats terbaca. */
+  try{ render(); }catch(e){ console.warn('[stats] render setelah loadPairStats gagal', e); }
   renderPairStats();
 }
 
