@@ -146,7 +146,8 @@ function loadAiterminaltrading(keys){
       AITERM_META = markets || AITERM_META;
       let found = 0;
       keys.forEach(pair=>{
-        const item = markets && markets.pairs && markets.pairs[pair];
+        const itemKey = (PAIRS[pair] && PAIRS[pair].name) || pair;
+        const item = markets && markets.pairs && markets.pairs[itemKey];
         if (!item) return;
         const price = N(item.price);
         const bid = N(item.bid || price), ask = N(item.ask || price);
