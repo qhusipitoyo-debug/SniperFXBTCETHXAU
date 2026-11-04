@@ -4,7 +4,7 @@ Dikonversi dari XAUUSD Sniper. Semua berjalan lokal di browser — scanner infor
 
 ## Pair (dropdown kiri atas, atau `?pair=EURUSD`)
 
-EUR/USD (Fiber) • USD/JPY (Gopher) • GBP/USD (Cable) • USD/CHF (Swissie) • AUD/USD (Aussie) • USD/CAD (Loonie) • NZD/USD (Kiwi)
+EUR/USD (Fiber) • USD/JPY (Gopher) • GBP/USD (Cable) • USD/CHF (Swissie) • AUD/USD (Aussie) • USD/CAD (Loonie) • NZD/USD (Kiwi) • GBP/JPY • EUR/JPY • Nasdaq 100 • S&P 500 • XAU/USD (Gold) • BTC/USD • ETH/USD
 
 ## Feed (satu sumber saja: aiterminaltrading)
 

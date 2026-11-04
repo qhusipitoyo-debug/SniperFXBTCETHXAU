@@ -227,7 +227,7 @@ function newsAffectsPair(e,pair){
   if(c==='USD')return true; // USD memengaruhi semua pair USD-quoted + crypto + gold
   const cur=({AUD:'AUDUSD',EUR:'EURUSD',GBP:'GBPUSD',JPY:'USDJPY',CHF:'USDCHF',CAD:'USDCAD',NZD:'NZDUSD'})[c];
   if(!cur)return false;
-  if(pair==='XAUUSD'||pair==='BTCUSD'||pair==='ETHUSD')return c==='USD';
+  if(pair==='XAUUSD'||pair==='BTCUSD'||pair==='ETHUSD'||pair==='NAS100'||pair==='US500')return c==='USD';
   return cur===pair;
 }
 function newsGoldBias(name,surprise,country){

@@ -9,11 +9,11 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner majors + XAU/BTC/ETH • harga dan history 1m dari aiterminaltrading</p></div></div>
+  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner FX crosses/indices + XAU/BTC/ETH • harga dan history 1m dari aiterminaltrading</p></div></div>
   <div class="topActions">
     <div class="connection"><i id="binanceDot"></i><span id="feedLabel">FEED</span></div>
     <select id="feedSelect" disabled aria-label="Satu-satunya sumber market">
-      <option value="aiterminaltrading">AITERMINALTRADING (10 pair)</option>
+      <option value="aiterminaltrading">AITERMINALTRADING (14 pair)</option>
     </select>
     <select id="modeSelect">
       <option value="agresif" selected>AGRESIF (longgar)</option>
@@ -38,7 +38,7 @@
     <div class="heroMain">
       <div>
         <label>MULTI SCANNER</label>
-        <h2 id="marketTitle">Memindai majors, emas & crypto…</h2>
+        <h2 id="marketTitle">Memindai FX, indeks, emas & crypto…</h2>
         <div class="heroSub">
           <span>LIVE <b id="scanLiveCount">0</b></span>
           <span>ALERT <b id="scanAlertCount">0</b></span>
@@ -136,9 +136,13 @@
       <option value="AUDUSD">AUD/USD</option>
       <option value="USDCAD">USD/CAD</option>
       <option value="NZDUSD">NZD/USD</option>
+      <option value="GBPJPY">GBP/JPY</option>
+      <option value="EURJPY">EUR/JPY</option>
       <option value="XAUUSD">XAU/USD (Emas)</option>
       <option value="BTCUSD">BTC/USD</option>
       <option value="ETHUSD">ETH/USD</option>
+      <option value="NAS100">Nasdaq 100</option>
+      <option value="US500">S&amp;P 500</option>
     </select></div>
     <div id="sniperBox" class="sniper">
       <div><small>STAGE</small><strong id="sniperText">WAIT</strong></div>

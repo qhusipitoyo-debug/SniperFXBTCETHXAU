@@ -82,6 +82,14 @@ const PAIRS={
     hours:[12,13,14,15,16,17,18,19], binance:null,deriv:'frxUSDCAD'},
   NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[0,16],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxNZDUSD'},
+  GBPJPY:{name:'GBP/JPY',nick:'Sterling Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[0,16],
+    hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxGBPJPY'},
+  EURJPY:{name:'EUR/JPY',nick:'Euro Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.3,sess:[0,16],
+    hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxEURJPY'},
+  NAS100:{name:'Nasdaq 100',nick:'NASDAQ',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:250,typSpread:20,sess:[13,21],
+    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'idNAS100'},
+  US500:{name:'S&P 500',nick:'SP500',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:80,typSpread:5,sess:[13,21],
+    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'idUS500'},
   /* --- Emas & crypto. pip: XAU 0.1, BTC 1, ETH 0.1. units = kontrak/lot di FBS (cek spesifikasi).
      typSpread BTC/ETH mengikuti poin broker (≈19–20 pip). h24 = tidak kena weekend FX.
      TIGA baris di bawah adalah angka IN-SAMPLE (jam dipilih di jendela yang sama), lihat catatan `hours`
