@@ -195,7 +195,6 @@ function buildEngines(keys){
 let feedClosedAt=null;   // status bursa saat feed terakhir dilanggan — kalau berbalik (Jumat 22:00 / Minggu 22:00 / libur) feed disusun ulang
 /* ---------- berita dinamis dari kalender (sumber: aiterminaltrading) ---------- */
 const NEWS_CAL_URL='https://pitoyict13-droid.github.io/aiterminaltrading/data/calendar.json';
-const NEWS_FAIRECONOMY=['https://nfs.faireconomy.media/ff_calendar_thisweek.json','https://nfs.faireconomy.media/ff_calendar_nextweek.json'];
 let NEWS_EVENTS=[];
 let NEWS_LAST_FETCH=0;
 const NEWS_REFRESH_MS=15*60*1000;
@@ -318,15 +317,9 @@ async function refreshNews(){
     if(r.ok){const j=await r.json(); raw=Array.isArray(j)?j:(j.events||[]);}
   }catch(e){console.warn('[news] kalender gagal',e);}
   if(!raw.length){
-    try{
-      const batches=await Promise.all(NEWS_FAIRECONOMY.map(async u=>{const r=await fetch(u,{cache:'no-store'});return r.ok?r.json():[];}));
-      const rank={Low:1,Medium:2,High:3};
-      const keywords=/fed|fomc|interest rate|inflation|cpi|pce|payroll|employment|unemployment|jobless|gdp|pmi|ism|retail sales|consumer confidence|jolts|durable goods|powell/i;
-      const allowed=['USD','EUR','GBP','JPY','AUD','NZD','CAD'];
-      raw=batches.flat().filter(e=>allowed.includes(String(e.country||'').toUpperCase())&&keywords.test(e.title||'')).map(e=>({
-        Date:e.date,Event:e.title,Country:e.country,Importance:rank[e.impact]||1,
-        Forecast:e.forecast||'',Previous:e.previous||'',Actual:e.actual||''}));
-    }catch(e){console.warn('[news] fallback gagal',e);}
+    // Sengaja tidak memakai feed kalender eksternal: aiterminaltrading adalah satu-satunya sumber.
+    // Kalender dibiarkan kosong sampai aiterminaltrading pulih, supaya tidak ada data yang tidak cocok.
+    console.warn('[news] kalender aiterminaltrading kosong/tidak tersedia; sumber eksternal tidak dipakai');
   }
   NEWS_EVENTS=raw.map(newsNormalize).filter(e=>e.Date&&!isNaN(new Date(e.Date)));
   try{ E.setNewsProvider((pair,now)=>newsBias(pair,now)); }catch(e){}
