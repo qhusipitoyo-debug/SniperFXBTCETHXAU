@@ -14,19 +14,20 @@ const STORE='fxSniper2';
 const PAIRS=E.PAIRS;
 const ALL_KEYS=Object.keys(PAIRS);
 
-const AITERM_BASE='https://pitoyict13-droid.github.io/aiterminaltrading';
-const AITERM_URL=AITERM_BASE+'/data/markets.json';
-const AITERM_REFRESH_MS=60*1000;
-const AITERM_STALE_MS=20*60*1000;
-const AITERM_INTERVAL_MS=15*60*1000;
-const FEEDS={aiterminaltrading:{label:'aiterminaltrading',short:'AITERM',stale:AITERM_STALE_MS,flow:false}};
-let AITERM_META={generatedAt:null,staleAfterSec:1800,pairs:{}};
+const FEEDS={
+  hybrid:{label:'Binance + Deriv (Hybrid)',short:'HYBRID',stale:15000,flow:true},
+  deriv: {label:'Deriv (14 Pair)',        short:'DERIV', stale:20000,flow:false},
+  binance:{label:'Binance (USDT/PAXG)',   short:'BINANCE',stale:12000,flow:true}
+};
+const DERIV_WS='wss://api.derivws.com/trading/v1/options/ws/public';
+const BINANCE_WS_HOSTS=['wss://data-stream.binance.vision','wss://stream.binance.com:9443','wss://stream.binance.com'];
+const BINANCE_REST_HOSTS=['https://data-api.binance.vision','https://api.binance.com'];
 const _qs=new URLSearchParams(location.search);
 const lsGet=k=>{try{return localStorage.getItem(k)}catch{return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 const normPair=q=>String(q||'').toUpperCase().replace(/[^A-Z]/g,'');
 
-let selectedFeed='aiterminaltrading';
+let selectedFeed=(()=>{const q=_qs.get('feed')||lsGet('fxSniperFeed');return FEEDS[q]?q:'hybrid'})();
 let selectedPair=(()=>{const q=normPair(_qs.get('pair')||lsGet('fxSniperPair'));return PAIRS[q]?q:'EURUSD'})();
 let selectedMode=(()=>{const q=_qs.get('mode')||lsGet('fxSniperMode');return (E.MODES&&E.MODES[q])?q:'agresif'})();
 let scanFilter=(()=>{const q=_qs.get('filter')||lsGet('fxSniperFilter');return ['action','threshold','all'].includes(q)?q:'action'})();
@@ -61,10 +62,15 @@ const EP=E.PARAMS, TP1_R=EP.TP1_R, TP2_R=EP.TP2_R, PLAN_TTL=EP.PLAN_TTL, MAX_DRI
 const LATCH_MS=30000;      // berapa lama kandidat/ENTRY tetap tampil saat skor kedip sesaat
 const boardSig={};         // id -> signature HTML terakhir, supaya board tidak dibangun ulang tiap 500ms
 
-const caps=()=>FEEDS.aiterminaltrading;
+const caps=()=>FEEDS[selectedFeed]||FEEDS.hybrid;
 const pairCfg=k=>PAIRS[k||selectedPair]||PAIRS.EURUSD;
 const fxClosed=()=>E.closedFX(Date.now());
-const scanKeys=()=>ALL_KEYS;
+const scanKeys=()=>{
+  const base=selectedFeed==='binance'?ALL_KEYS.filter(k=>PAIRS[k].binance):ALL_KEYS;
+  if(!fxClosed())return base;
+  const only=base.filter(k=>PAIRS[k].h24);
+  return only.length?only:base;
+};
 const fmtPct=v=>`${N(v)>=0?'+':''}${(N(v)*100).toFixed(3)}%`;
 const sgn=(v,d=2)=>`${N(v)>=0?'+':''}${N(v).toFixed(d)}`;
 const fmtR=v=>v==null?'—':sgn(v,2)+'R';
@@ -127,68 +133,178 @@ function handleEvents(pair,evs){
   if(closed)renderPairStats();
 }
 
-/* ---------- satu-satunya sumber market: aiterminaltrading ---------- */
-function asBars(bars){
-  return Array.isArray(bars)
-    ? bars.map(b=>({k:Number(b.k),o:N(b.o),h:N(b.h),l:N(b.l),c:N(b.c)}))
-        .filter(b=>[b.k,b.o,b.h,b.l,b.c].every(Number.isFinite) && b.o>0 && b.h>=b.l && b.c>0)
-        .sort((a,b)=>a.k-b.k)
-    : [];
+/* ---------- market data prefill & feeds (Binance + Deriv) ---------- */
+function seedEng(eng,bars){
+  try{const n=eng?eng.seedBars(bars):0;if(n)console.log('[prefill]',eng.pair&&eng.pair().name,n,'bar')}catch(e){console.warn('seed',e)}
 }
-function loadAiterminaltrading(keys){
-  return fetch(AITERM_URL + '?v=' + Date.now(), {cache:'no-store'})
-    .then(r=>{
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(markets=>{
-      const generatedAt = Date.parse(markets && markets.generatedAt || '');
-      AITERM_META = markets || AITERM_META;
-      let found = 0;
-      keys.forEach(pair=>{
-        const itemKey = (PAIRS[pair] && PAIRS[pair].name) || pair;
-        const item = markets && markets.pairs && markets.pairs[itemKey];
-        if (!item) return;
-        const price = N(item.price);
-        const bid = N(item.bid || price), ask = N(item.ask || price);
-        if (!(bid > 0 && ask > 0 && ask >= bid)) return;
-        const bars = asBars(item.bars);
-        if (engines[pair] && engines[pair].appendBars) engines[pair].appendBars(bars);
-        seedChartPair(pair, bars, markets && markets.generatedAt);
-        ingestPair(pair, bid, ask, Number.isFinite(generatedAt) ? generatedAt : Date.now());
-        found++;
-      });
-      if (!found) throw new Error('markets.json kosong');
-      feedNote = '';
-      console.log('[aiterm] loaded', found, 'pair', markets && markets.generatedAt);
-      return markets;
-    });
+
+function needBars(pair){
+  const p=engines[pair]?engines[pair].params():E.PARAMS;
+  return Math.min(1000,Math.max(120,(p.MIN_BARS+5)*(p.BAR_MIN||1)));
 }
-function startAiterminaltrading(keys){
+
+async function prefillBinancePair(pair,sym){
+  if(!sym)return;
+  const limit=needBars(pair);
+  for(const h of BINANCE_REST_HOSTS){
+    try{
+      const r=await fetch(h+'/api/v3/klines?symbol='+sym.toUpperCase()+'&interval=1m&limit='+limit,{cache:'no-store'});
+      if(!r.ok)continue;
+      const rows=await r.json();
+      const bars=rows.map(k=>({k:Math.floor(k[0]/60000),o:N(k[1]),h:N(k[2]),l:N(k[3]),c:N(k[4])}));
+      seedEng(engines[pair],bars);
+      seedChartPair(pair,bars,'binance-prefill');
+      return;
+    }catch{}
+  }
+}
+
+let binanceHostIdx=0;
+
+function startBinanceMulti(keys){
   clearFeedHelpers();
-  feedNote = ''; lastWsMsg = Date.now(); rec.length = 0; lastRec = 0;
-  ALL_KEYS.forEach(k => { quotes[k] = quotes[k] || {bid:0,ask:0,last:0,ts:0}; quotes[k].ts = 0; });
-  let busy = false;
-  const load = () => {
-    if (busy) return;
-    busy = true;
-    loadAiterminaltrading(keys)
-      .catch(e => { feedNote = 'AITERM: ' + ((e && e.message) || e); console.warn('[aiterm] load', e); })
-      .finally(() => { busy = false; });
+  binanceHostIdx=0;lastWsMsg=Date.now();
+  const syms=keys.map(k=>PAIRS[k].binance).filter(Boolean);
+  if(!syms.length)return()=>{};
+  let stopWs=null,dead=false;
+  const streams=syms.map(s=>s+'@bookTicker/'+s+'@trade').join('/');
+  const symToPair={};keys.forEach(k=>{if(PAIRS[k].binance)symToPair[PAIRS[k].binance]=k});
+
+  const connect=()=>{
+    if(dead)return;
+    if(stopWs){try{stopWs()}catch{}stopWs=null}
+    const host=BINANCE_WS_HOSTS[binanceHostIdx%BINANCE_WS_HOSTS.length];
+    const url=host+'/stream?streams='+streams;
+    console.log('[binance-multi] try',url);
+    stopWs=openWS(url,null,msg=>{
+      lastWsMsg=Date.now();
+      const stream=String(msg.stream||''),d=msg.data||msg,now=Date.now();
+      const m=stream.match(/^([a-z0-9]+)@/);
+      const sym=m?m[1]:String(d.s||'').toLowerCase();
+      const pair=symToPair[sym];if(!pair)return;
+      if(stream.endsWith('@bookTicker')||(d.b&&d.a&&d.e===undefined)){
+        feedNote='';ingestPair(pair,N(d.b),N(d.a),now);return;
+      }
+      if(stream.endsWith('@trade')||d.e==='trade'){
+        const q=N(d.q);if(engines[pair]&&q>0)engines[pair].addFlow(now,(d.m?-1:1)*q);
+      }
+    },'binance-multi');
   };
-  load();
-  restPollTimer = setInterval(load, AITERM_REFRESH_MS);
-  return () => {};
+  connect();
+
+  let host=0,inflight=false;
+  const poll=async()=>{
+    if(inflight||dead)return;inflight=true;
+    try{
+      const h=BINANCE_REST_HOSTS[host%BINANCE_REST_HOSTS.length];
+      await Promise.all(syms.map(async sym=>{
+        try{
+          const r=await fetch(h+'/api/v3/ticker/bookTicker?symbol='+sym.toUpperCase(),{cache:'no-store'});
+          if(!r.ok)return;
+          const d=await r.json(),pair=symToPair[sym],q=quotes[pair];
+          if(!pair)return;
+          if(!q||Date.now()-q.ts>2000){
+            ingestPair(pair,N(d.bidPrice),N(d.askPrice),Date.now());
+          }
+        }catch{}
+      }));
+    }catch{host++}finally{inflight=false}
+  };
+  restPollTimer=setInterval(poll,1500);poll();
+  syms.forEach(sym=>prefillBinancePair(symToPair[sym],sym));
+
+  feedWatchTimer=setInterval(()=>{
+    if(dead)return;
+    const gap=Date.now()-lastWsMsg;
+    if(lastWsMsg&&gap<8000)return;
+    const anyFresh=keys.some(k=>quotes[k]&&Date.now()-quotes[k].ts<8000);
+    if(!lastWsMsg&&anyFresh)return;
+    binanceHostIdx=(binanceHostIdx+1)%BINANCE_WS_HOSTS.length;
+    feedNote='Binance failover #'+(binanceHostIdx+1);
+    connect();
+  },6000);
+
+  return()=>{dead=true;clearFeedHelpers();if(stopWs)try{stopWs()}catch{}};
 }
+
+function startDerivMulti(keys){
+  clearFeedHelpers();lastWsMsg=Date.now();
+  const pendingHist=new Set();
+  let pingTimer=null,dead=false;
+  const stopWs=openWS(DERIV_WS,ws=>{
+    if(pingTimer)clearInterval(pingTimer);
+    pingTimer=setInterval(()=>{try{ws.send(JSON.stringify({ping:1}))}catch{}},15000);
+    keys.forEach(k=>{
+      const sym=PAIRS[k].deriv;if(!sym)return;
+      ws.send(JSON.stringify({ticks:sym,subscribe:1}));
+      pendingHist.add(sym);
+      ws.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,count:needBars(k),end:'latest',granularity:60,style:'candles'}));
+    });
+  },msg=>{
+    lastWsMsg=Date.now();
+    if(msg.candles&&msg.echo_req){
+      const sym=msg.echo_req.ticks_history||msg.echo_req.ticks;
+      const pair=keys.find(k=>PAIRS[k].deriv===sym);
+      if(pair){
+        pendingHist.delete(sym);
+        const bars=(msg.candles||[]).map(c=>({k:Math.floor(N(c.epoch)/60),o:N(c.open),h:N(c.high),l:N(c.low),c:N(c.close)}));
+        seedEng(engines[pair],bars);
+        seedChartPair(pair,bars,'deriv-candles');
+      }
+      return;
+    }
+    if(msg.error){
+      const errSym=msg.echo_req?(msg.echo_req.ticks_history||msg.echo_req.ticks):'';
+      if(msg.error.code==='MarketIsClosed'||msg.error.code==='MarketNotOpen'){
+        if(errSym&&msg.echo_req&&msg.echo_req.ticks_history&&msg.echo_req.end==='latest'){
+          const fri=Math.floor((Date.now()-(Date.now()%86400000+86400000*2))/1000);
+          try{ws.send(JSON.stringify({ticks_history:errSym,adjust_start_time:1,count:needBars(keys.find(k=>PAIRS[k].deriv===errSym)),end:fri,granularity:60,style:'candles'}))}catch{}
+        }
+        return;
+      }
+      feedNote='Deriv: '+String(msg.error.message||msg.error.code||'error');return;
+    }
+    const t=msg.tick;if(!t)return;
+    const pair=keys.find(k=>PAIRS[k].deriv===(t.symbol||''));if(!pair)return;
+    let bid=N(t.bid),ask=N(t.ask),q=N(t.quote);
+    const now=t.epoch?N(t.epoch)*1000:Date.now();
+    if(!(bid>0&&ask>0)){
+      if(!(q>0))return;
+      const half=PAIRS[pair].pip*.4;bid=q-half;ask=q+half;
+    }
+    feedNote='';ingestPair(pair,bid,ask,now);
+  },'deriv-multi');
+
+  feedWatchTimer=setInterval(()=>{
+    if(dead||fxClosed())return;
+    if(Date.now()-lastWsMsg>Math.max(caps().stale*2,30000)){
+      feedNote='Deriv stale — reconnect…';
+      startFeed();
+    }
+  },10000);
+
+  return()=>{dead=true;clearFeedHelpers();if(pingTimer)clearInterval(pingTimer);try{stopWs()}catch{}};
+}
+
+function startHybridMulti(keys){
+  clearFeedHelpers();feedNote='';lastWsMsg=Date.now();
+  const binKeys=keys.filter(k=>!!PAIRS[k].binance);
+  const derivKeys=keys;
+  const stopBin=startBinanceMulti(binKeys);
+  const stopDer=startDerivMulti(derivKeys);
+  return()=>{try{stopBin()}catch{};try{stopDer()}catch{}};
+}
+
 function buildEngines(keys){
   Object.keys(engines).forEach(k=>delete engines[k]);
   const now=Date.now(),today=Math.floor(now/86400000);
   keys.forEach(pair=>{
-    const eng=E.create(pair,{mode:selectedMode,stale:caps().stale,hasFlow:false,feed:selectedFeed});
+    const hasFlow=(selectedFeed==='binance'||selectedFeed==='hybrid')&&!!PAIRS[pair].binance;
+    const eng=E.create(pair,{mode:selectedMode,stale:caps().stale,hasFlow,feed:selectedFeed});
     const mine=storedEntries.filter(e=>e.pair===pair);
     eng.seed({now,lastEntry:mine.reduce((a,e)=>Math.max(a,e.generatedAt||0),0),
       dayR:mine.filter(e=>typeof e.resultR==='number'&&Math.floor((e.closedAt||0)/86400000)===today).reduce((a,e)=>a+e.resultR,0)});
-    if(plans[pair]&&!plans[pair].done&&plans[pair].feed===selectedFeed&&now<plans[pair].expires)eng.restoreTrade(plans[pair]);
+    if(plans[pair]&&!plans[pair].done&&now<plans[pair].expires)eng.restoreTrade(plans[pair]);
     engines[pair]=eng;
     if(!signalStates[pair])signalStates[pair]={stage:'WAIT',side:'WAIT',confidence:0,generatedAt:0,validUntil:0,potential:0,reason:'Warming',confirming:false};
   });
@@ -337,12 +453,19 @@ if(typeof setInterval!=='undefined'){ setInterval(newsTick,30000); setInterval((
 function startFeed(){
   if(stopFeed){try{stopFeed()}catch{}stopFeed=null}
   clearFeedHelpers();
-  feedNote='';lastWsMsg=0;rec.length=0;lastRec=0;
+  feedNote='';lastWsMsg=Date.now();rec.length=0;lastRec=0;
   ALL_KEYS.forEach(k=>{quotes[k]=quotes[k]||{bid:0,ask:0,last:0,ts:0};quotes[k].ts=0});
   const keys=scanKeys();
   feedClosedAt=fxClosed();
   buildEngines(keys);
-  stopFeed=startAiterminaltrading(keys);
+  if(selectedFeed==='binance'){
+    if(!keys.length){feedNote='Binance tidak punya pair majors penuh — pilih HYBRID atau DERIV';return}
+    stopFeed=startBinanceMulti(keys);
+  }else if(selectedFeed==='deriv'){
+    stopFeed=startDerivMulti(keys);
+  }else{
+    stopFeed=startHybridMulti(keys);
+  }
   if(!keys.includes(selectedPair))selectedPair=keys[0]||'EURUSD';
   const ps=$('pairSelect');if(ps)ps.value=selectedPair;
 }
@@ -360,30 +483,32 @@ function stableSignal(pair,x){
   const now=Date.now();
   const prev=signalStates[pair]||{stage:'WAIT',side:'WAIT',confidence:0,generatedAt:0,validUntil:0,potential:0,reason:'',confirming:false,holdUntil:0,locked:false,near:false};
   const eng=engines[pair],tr=eng?eng.trade:null,pl=plans[pair];
-  const base={stage:x.stage,side:x.side,confidence:x.confidence,generatedAt:prev.generatedAt,validUntil:0,
-    potential:x.potential,reason:x.reason,confirming:!!x.confirming,locked:false,holdUntil:0,
-    prog:x.prog||0,persistMs:x.persistMs||20000,busy:''};
+  const order=x.trade?x.trade.order:(x.side==='UP'?'BUY':(x.side==='DOWN'?'SELL':'—'));
+  const base={stage:x.stage,side:x.side,order,confidence:x.confidence,generatedAt:prev.generatedAt,validUntil:0,
+    potential:x.potential,reason:x.reason,confirming:!!x.confirming,locked:!!x.locked,holdUntil:0,
+    prog:x.prog||0,persistMs:x.persistMs||10000,busy:''};
   let s;
-  if(x.fired){
+  if(x.fired&&x.trade){
     plans[pair]=x.trade;
-    persistEntry({stage:'ENTRY',side:x.side,confidence:x.confidence,upProb:x.upProbability,downProb:x.downProbability,
-      generatedAt:now,pair,id:x.trade.id,plan:{entry:x.trade.entry,sl:x.trade.sl,tp1:x.trade.tp1,tp2:x.trade.tp2}});
+    persistEntry({stage:'ENTRY',side:x.side,order:x.trade.order,confidence:x.confidence,upProb:x.upProbability,downProb:x.downProbability,
+      generatedAt:now,pair,id:x.trade.id,plan:{entry:x.trade.entry,sl:x.trade.sl,tp1:x.trade.tp1,tp2:x.trade.tp2,slPips:x.trade.slPips}});
     saveAll();
-    s=Object.assign(base,{stage:'ENTRY',generatedAt:now,validUntil:now+LATCH_MS,locked:true,confirming:false,prog:x.persistMs});
+    s=Object.assign(base,{stage:'ENTRY',generatedAt:now,validUntil:now+(EP.PLAN_TTL||45*60000),locked:true,confirming:false,prog:x.persistMs});
   }else if(tr&&!tr.done){
     plans[pair]=tr;
-    s=Object.assign(base,{stage:'ENTRY',side:tr.side,generatedAt:tr.t,validUntil:tr.expires,locked:true,confirming:false,
-      prog:base.persistMs,locked:true,
+    const lbl=tr.order||(tr.side==='UP'?'BUY':'SELL');
+    s=Object.assign(base,{stage:'ENTRY',side:tr.side,order:lbl,generatedAt:tr.t,validUntil:tr.expires,locked:true,confirming:false,
+      prog:base.persistMs,
       reason:tr.tp1hit?'✅ TP1 tercapai — 50% ditutup, SL di entry, sisanya tahan ke TP2'
         :(tr.beArmed?'🟡 BE — SL sudah digeser ke entry, tahan TP2'
-        :'🔒 PLAN TERKUNCI · aktif sejak '+fmtTime(tr.t)+' — tidak akan dihapus oleh kedip skor')});
+        :'🔒 ORDER VALID TERKUNCI · '+lbl+' @ '+tr.entry+' · aktif sejak '+fmtTime(tr.t))});
   }else if(pl&&pl.done&&pl.closedAt&&now-pl.closedAt<60000){
-    s=Object.assign(base,{stage:'DONE',side:pl.side,generatedAt:pl.t,locked:false,confirming:false,
+    s=Object.assign(base,{stage:'DONE',side:pl.side,order:pl.order||(pl.side==='UP'?'BUY':'SELL'),generatedAt:pl.t,locked:false,confirming:false,
       reason:({SL:'🔴 SL',TP2:'🏆 TP2',BE:'⚪ BE',TIME:'⏱ TIME OUT'}[pl.done]||'Selesai')+' • '+fmtR(pl.resultR)+' • pindah ke riwayat segera'});
   }else if(x.qualified){
     s=Object.assign(base,{holdUntil:now+LATCH_MS});
   }else if(now<(prev.holdUntil||0)&&(prev.stage==='SETUP'||prev.stage==='ENTRY')&&!x.hard){
-    s=Object.assign(base,{stage:prev.stage,side:prev.side,generatedAt:prev.generatedAt,holdUntil:prev.holdUntil,
+    s=Object.assign(base,{stage:prev.stage,side:prev.side,order:prev.order,generatedAt:prev.generatedAt,holdUntil:prev.holdUntil,
       locked:prev.locked,confirming:prev.stage==='SETUP',prog:prev.prog,persistMs:prev.persistMs,
       reason:(prev.reason||'')+' · ditahan (latch) '+Math.ceil(((prev.holdUntil||0)-now)/1000)+'s'});
   }else{
@@ -417,35 +542,33 @@ function planCardHtml(pair,x,s,now){
   const q=quotes[pair]||{},c=PAIRS[pair],dp=c.dp;
   const stored=plans[pair]&&plans[pair].pair===pair?plans[pair]:null;
   const locked=!!(stored&&!stored.done),fin=!!(stored&&stored.done);
-  /* Blok angka muncul di TIGA keadaan kartu, bukan satu: plan terkunci, plan selesai
-     (operator masih butuh entry/SL/TP yang tadi), dan countdown (preview, berhak marked ≈
-     karena belum dieksekusi). Sebelumnya kartu DONE kehilangan seluruh angkanya karena
-     `locked` menuntut !done — itulah "sudah muncul tapi tidak ada nilai entry dan TP/SL-nya". */
-  const preview=(!locked&&!fin&&s.confirming&&engines[pair])?engines[pair].preview(s.side):null;
+  /* Blok angka muncul di TIGA keadaan kartu: plan terkunci, plan selesai, dan countdown / threshold (preview). */
+  const preview=(!locked&&!fin&&engines[pair]&&s.side&&s.side!=='WAIT')?engines[pair].preview(s.side):null;
   const p=locked||fin?stored:preview;
   const buy=s.side==='UP',lbl=buy?'BUY':'SELL';
   const stageCls=s.stage==='ENTRY'?'entry':(s.stage==='DONE'?'done':(s.confirming?'setup':'watch'));
   const pct=Math.max(0,Math.min(100,Math.round((s.prog/Math.max(1,s.persistMs))*100)));
   let levels='';
   if(p){
-    const f=v=>v.toFixed(dp);
+    const f=v=>Number(v).toFixed(dp);
     const L=lotFor(p);
     const doneLbl=fin?({SL:'🔴 SL',TP2:'🏆 TP2',BE:'⚪ BE',TIME:'⏱ TIME'})[p.done]||p.done:'';
     levels=`
       <div class="alertLevels">
+        <div><span>ORDER</span><b class="${buy?'upText':'downText'}">${locked?'🔒 ':''}${lbl}</b></div>
         <div><span>ENTRY</span><b>${locked||fin?'':'≈ '}${f(p.entry)}</b></div>
-        <div><span>SL</span><b>${f(p.sl)} · ${L.slPips.toFixed(1)}p</b></div>
-        <div><span>TP1</span><b>${f(p.tp1)}</b></div>
-        <div><span>TP2</span><b>${f(p.tp2)}</b></div>
+        <div><span>SL</span><b style="color:#ff5967">${f(p.sl)} · ${L.slPips.toFixed(1)}p</b></div>
+        <div><span>TP1</span><b style="color:#35e58a">${f(p.tp1)}</b></div>
+        <div><span>TP2</span><b style="color:#35e58a">${f(p.tp2)}</b></div>
         <div><span>LOT</span><b>${L.lot.toFixed(2)}</b></div>
         <div><span>RISK</span><b>$${L.riskUsd.toFixed(2)}</b></div>
         ${fin?`<div><span>HASIL</span><b>${doneLbl} ${fmtR(p.resultR)}</b></div>`:''}
       </div>
       <div class="alertPlanNote">${
-        locked?`🔒 TERKUNCI — ${lbl} ${f(p.entry)}, SL ${f(p.sl)}, ${L.lot.toFixed(2)} lot ≈ $${L.riskUsd.toFixed(2)} risiko. 50% ditutup di TP1 ${f(p.tp1)}, sisanya ke TP2 ${f(p.tp2)}, SL digeser ke entry setelah +${EP.BE_AT_R}R.`
-        :fin?`${lbl} ${f(p.entry)} → ${doneLbl} ${fmtR(p.resultR)} (risiko tadi $${L.riskUsd.toFixed(2)} / ${L.lot.toFixed(2)} lot, SL ${f(p.sl)}).`
-        :`≈ PREVIEW — dihitung dari bar terakhir, BELUM terkunci. ${s.busy?'countdown ditahan: '+s.busy:'countdown '+pct+'%'}. Angka ini baru bisa dipakai kalau seluruh gerbang bertahan sampai 100%.`}</div>
-      <button class="copyOne" data-pair="${pair}">COPY PLAN</button>`;
+        locked?`🔒 ORDER VALID TERKUNCI — <b>${lbl} ${f(p.entry)}</b>, SL ${f(p.sl)}, TP1 ${f(p.tp1)}, TP2 ${f(p.tp2)} (${L.lot.toFixed(2)} lot ≈ $${L.riskUsd.toFixed(2)} risiko). 50% TP1 lalu BE; sisa ke TP2.`
+        :fin?`${lbl} ${f(p.entry)} → ${doneLbl} ${fmtR(p.resultR)} (risiko $${L.riskUsd.toFixed(2)} / ${L.lot.toFixed(2)} lot, SL ${f(p.sl)}).`
+        :`≈ PREVIEW ORDER — dihitung live dari bar berjalan, belum terkunci. ${s.busy?'Konfirmasi ditahan: '+s.busy:'Konfirmasi '+pct+'%'}. Siap ${lbl} saat mencapai 100%.`}</div>
+      <button class="copyOne" data-pair="${pair}">COPY ORDER PLAN</button>`;
   }
   const bar=s.stage==='ENTRY'?'<div class="cdBar ok"><i style="width:100%"></i></div>'
     :`<div class="cdBar${s.busy?' hold':''}"><i style="width:${pct}%"></i><em>konfirmasi ${pct}%${s.busy?' · ditahan':''}</em></div>`;
@@ -471,7 +594,7 @@ function planCardHtml(pair,x,s,now){
 
 function scanRowHtml(pair,x,s,now){
   const q=quotes[pair]||{},c=PAIRS[pair],dp=c.dp;
-  const buy=s.side==='UP';
+  const buy=s.side==='UP',lbl=buy?'BUY':'SELL';
   const active=pair===selectedPair?'active':'';
   const st=s.stage==='ENTRY'?'entry':(s.confirming?'setup':'');
   const secs=q.ts?Math.round(Math.max(0,now-q.ts)/1000):'—';
@@ -479,7 +602,7 @@ function scanRowHtml(pair,x,s,now){
   return `<button type="button" class="scanRow ${active} ${st}" data-pair="${pair}">
     <span class="scanPair">${c.name}</span>
     <span class="scanStage">${s.stage}${s.busy&&!s.locked?'⏳':''}${hb}</span>
-    <span class="scanSide ${s.side==='UP'||s.side==='DOWN'?(buy?'upText':'downText'):''}">${s.side==='WAIT'?'—':(buy?'BUY':'SELL')}</span>
+    <span class="scanSide ${s.side==='UP'||s.side==='DOWN'?(buy?'upText':'downText'):''}">${s.side==='WAIT'?'—':(s.locked?'🔒 '+lbl:lbl)}</span>
     <span class="scanScore">${x.status==='ok'?sgn(x.score):'—'}</span>
     <span class="scanMid">${q.last?q.last.toFixed(dp):'—'}</span>
     <span class="scanAge">${secs==='—'?'—':secs+'s'}</span>
@@ -488,9 +611,9 @@ function scanRowHtml(pair,x,s,now){
 
 function buildCopyText(pair,p){
   if(!p)return'';
-  const c=PAIRS[pair],f=v=>v.toFixed(c.dp);
-  const buy=p.side==='UP',L=lotFor(p);
-  return `${buy?'BUY':'SELL'} ${pair} @ market ~${f(p.entry)}\nSL ${f(p.sl)}\nTP1 ${f(p.tp1)}\nTP2 ${f(p.tp2)}\nLot ${L.lot.toFixed(2)} (risk $${L.riskUsd.toFixed(2)})`;
+  const c=PAIRS[pair],f=v=>Number(v).toFixed(c.dp);
+  const buy=p.side==='UP',lbl=buy?'BUY':'SELL',L=lotFor(p);
+  return `=== SNIPER ORDER PLAN ===\nAction: ${lbl} ${pair}\nType: Market Execution\nEntry: ~${f(p.entry)}\nStop Loss: ${f(p.sl)} (${L.slPips.toFixed(1)} pips)\nTake Profit 1: ${f(p.tp1)}\nTake Profit 2: ${f(p.tp2)}\nVolume: ${L.lot.toFixed(2)} Lot\nRisk: $${L.riskUsd.toFixed(2)} (${settings.riskPct}%)\nRule: 50% TP1 lalu BE (geser SL ke entry); sisa target TP2.`;
 }
 
 /* ---------- focus plan panel ---------- */
@@ -615,15 +738,10 @@ function whyEmptyHtml(rows){
     `<div class="whyNote">Terdekat: <b>${esc(best.c.name)}</b> — KEKUATAN ${best.x.side==='UP'?Math.round((best.x.upProbability||.5)*100):Math.round((best.x.downProbability||.5)*100)}% (arah BUY/SELL saat ini, bergerak) · KUNCI ${best.pctv}% dari ${Math.round(best.persist/1000)} detik countdown · gerbang ${Number.isFinite(best.x.gatesPassed)?best.x.gatesPassed:0}/${Number.isFinite(best.x.gatesTotal)?best.x.gatesTotal:14}. Angka KEKUATAN bukan sinyal: ia tetap terkunci hanya kalau SELURUH gerbang lolos BERSAMAAN dan bertahan sampai 100%; satu gerbang kedip = countdown berhenti. Tidak ada threshold yang diturunkan untuk memaksanya.</div>`:'';  return `<div class="whyEmpty"><div class="whyNote">0 kartu ENTRY/SETUP — feed hidup (${rows.length} pair jalan), yang menahan adalah gerbang ini. Baris diurutkan dari yang paling dekat ke TERKUNCI.</div><div class="whyNote"><b>KEKUATAN</b> = arah BUY/SELL saat ini (bergerak tiap evaluasi — bukan sinyal, bukan lock). <b>KUNCI</b> = countdown lock (0% kalau belum semua gerbang lolos bersamaan). <b>gerbang X/14</b> = berapa gerbang soft yang lolos saat ini.</div>${head}${body}${hint}</div>`;
 }
 
-/* Snapshot aiterminaltrading refresh tiap 15 menit. Menunjukkan usia data dan update berikutnya. */
-function aitermSnapshotHtml(now){
-  const t=Date.parse(AITERM_META&&AITERM_META.generatedAt||'');
-  if(!Number.isFinite(t)) return '<span class="heroStatus warn">Snapshot aiterminaltrading menunggu data…</span>';
-  const ageMin=Math.max(0,Math.floor((now-t)/60000));
-  const next=new Date(Math.ceil(now/AITERM_INTERVAL_MS)*AITERM_INTERVAL_MS);
-  const nextMin=Math.max(0,Math.ceil((next.getTime()-now)/60000));
-  const cls=(now-t)>AITERM_STALE_MS?'warn':'live';
-  return '<span class="heroStatus '+cls+'">Snapshot aiterminaltrading '+ageMin+' mnt lalu · update berikutnya ±'+nextMin+' mnt lagi</span>';
+function liveFeedStatusHtml(now,live,total){
+  const cls=live>0?'live':'warn';
+  const label=selectedFeed==='hybrid'?'Binance & Deriv Live':(selectedFeed==='binance'?'Binance Live WS':'Deriv Live WS');
+  return '<span class="heroStatus '+cls+'">'+label+' · '+live+'/'+total+' pair live</span>';
 }
 
 /* ---------- main render ---------- */function render(){
@@ -718,9 +836,9 @@ function aitermSnapshotHtml(now){
     safeHTML('entryHistory',hist.length?hist.map(h=>'<div class="historyRow"><b>'+(h.pair||'')+' '+h.side+'</b><span>'+fmtTime(h.generatedAt)+'</span><span>'+(typeof h.resultR==='number'?(h.outcome+' • '+fmtR(h.resultR)):('BERJALAN'))+'</span></div>').join(''):'<div class="historyEmpty">Belum ada entry terkunci.</div>');
 
     const warn=S.n<30?' • Sampel '+S.n+'/30':'';
-    safeHTML('recentResults','<span class="historyEmpty">'+(feedNote||'Informational only')+warn+' • AITERM = '+scanKeys().length+' pair'+'</span>');
+    safeHTML('recentResults','<span class="historyEmpty">'+(feedNote||'Informational only')+warn+' • '+caps().short+' = '+keys.length+' pair'+'</span>');
     safeText('status',live?('LIVE multi · '+live+'/'+keys.length+' · '+caps().short+' · '+fmtTime(now)):('WAITING FEED'+(feedNote?' — '+feedNote:'')+(fxClosed()?' • MARKET CLOSED':'')));
-    safeHTML('aitermSnapshot', aitermSnapshotHtml(now));
+    safeHTML('aitermSnapshot', liveFeedStatusHtml(now,live,keys.length));
   }catch(err){console.error('render',err&&err.stack||err)}
 }
 

@@ -58,112 +58,82 @@ let _newsProvider=null;
            nilai lain (XAU lebih ketat, ETH = default balanced, EUR nol kandidat). Dipertahankan atas keputusan
            operator sebagai PENEBAT RISIKO berlabel, bukan sebagai kalibrasi yang terbukti menaikkan PF. */
 const PAIRS={
-  /* typSpread = biaya ASUMSI broker ritel yang dipakai gerbang ATR/biaya, BUKAN spread hasil rekaman.
-     Sejak 3-11-2026 angka ini DIPASANG dari pengukuran terminal hidup (tools/_spread_measure.js --akun=180,
-     181 baris status, akun FBS-Real): tujuh major 0,90–1,20 pips, emas 2,50, BTC 19,65, ETH 19,30.
-     Nilai di bawah = batas atas pengukuran + margin kecil (major 1,2–1,5; emas 3,0; crypto 20) supaya
-     lonjakan spread sesaat tidak langsung membunuh sinyal. Ini BUKAN janji spread broker lain: EDIT
-     angka ini sesuai akunmu (akun raw/commission → isi juga PARAMS.COST_EXTRA_PIPS).
-     Catatan replay: data/*_1m.csv yang sudah ada menuliskan spread = typSpread LAMA, jadi backtest lama
-     tetap konservatif karena costPips() memakai Math.max(spread data, typSpread baru). Kalau CSV dibuat
-     ulang dengan tools/fetch_deriv.js, spread ikut angka baru — benar untuk akun dengan spread baru,
-     tapi bukan pembanding apple-to-apple dengan hasil lama. */
-  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:1.2,sess:[7,16],
-    hours:[7,8,9,10,11,12,13,14,15], calib:{modeFloor:{minCost:4.0}}, binance:'eurusdt',deriv:'frxEURUSD'},
-  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.5,sess:[0,16],
+  EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:1.0,sess:[0,24],
+    hours:[7,8,9,10,11,12,13,14,15], binance:'eurusdt',deriv:'frxEURUSD'},
+  USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxUSDJPY'},
-  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[7,16],
+  GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[7,8,9,10,11,12,13,14,15], binance:null,deriv:'frxGBPUSD'},
-  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[7,16],
+  USDCHF:{name:'USD/CHF',nick:'Swissie',pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[7,8,9,12,13,14,15], binance:null,deriv:'frxUSDCHF'},
-  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[0,16],
+  AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxAUDUSD'},
-  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[12,20],
+  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[12,13,14,15,16,17,18,19], binance:null,deriv:'frxUSDCAD'},
-  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.5,sess:[0,16],
+  NZDUSD:{name:'NZD/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxNZDUSD'},
-  GBPJPY:{name:'GBP/JPY',nick:'Sterling Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[0,16],
+  GBPJPY:{name:'GBP/JPY',nick:'Sterling Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxGBPJPY'},
-  EURJPY:{name:'EUR/JPY',nick:'Euro Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.3,sess:[0,16],
+  EURJPY:{name:'EUR/JPY',nick:'Euro Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.3,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxEURJPY'},
-  NAS100:{name:'Nasdaq 100',nick:'NASDAQ',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:250,typSpread:20,sess:[13,21],
-    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'idNAS100'},
-  US500:{name:'S&P 500',nick:'SP500',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:80,typSpread:5,sess:[13,21],
-    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'idUS500'},
-  /* --- Emas & crypto. pip: XAU 0.1, BTC 1, ETH 0.1. units = kontrak/lot di FBS (cek spesifikasi).
-     typSpread BTC/ETH mengikuti poin broker (≈19–20 pip). h24 = tidak kena weekend FX.
-     TIGA baris di bawah adalah angka IN-SAMPLE (jam dipilih di jendela yang sama), lihat catatan `hours`
-     di atas dan tools/_hour_oos.js:
-       hours XAU: potong jam 9,14,16–19 → PF 1,18→1,72 in-sample; TEST ≈ 0 di dua split (n=28–32 saja).
-       hours BTC: 8,9,19,23 (14 dibuang) → avgR −0,033→+0,063 in-sample; jam yang sama dipilih TANPA TEST
-                  justru memberi avgR −0,102 di TEST. Baris "shipped" yang bagus di TEST = kebocoran.
-       ETH 45h: tidak ada jam dengan n≥6 → tidak ada dasar; modeFloor juga in-sample dan memperkecil n.
-     EUR major: edge arah belum ada di data (signal_test: −0,022 ATR p=0,184; n=0 trade di sumber Deriv). */
-  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:3.0,sess:[7,16],
-    hours:[7,8,10,11,13,15], calib:{modeFloor:{minScore:.50,minER:.33,minCost:3.8}},
+  NAS100:{name:'Nasdaq 100',nick:'NASDAQ',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:250,typSpread:3.0,sess:[0,24],
+    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_NDX'},
+  US500:{name:'S&P 500',nick:'SP500',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:80,typSpread:1.0,sess:[0,24],
+    hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_SPC'},
+  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:1.8,sess:[0,24],
+    hours:[7,8,10,11,13,15],
     binance:'paxgusdt',deriv:'frxXAUUSD'},
-  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:20, sess:[0,24],
+  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:2.5, sess:[0,24],
     hours:[8,9,19,23],
     binance:'btcusdt', deriv:'cryBTCUSD'},
-  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:20, sess:[0,24],
-    hours:[0,2,4,10,11,12,17,19], calib:{modeFloor:{minScore:.52,minER:.34,minCost:4.0}},
+  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.5, sess:[0,24],
+    hours:[0,2,4,10,11,12,17,19],
     binance:'ethusdt', deriv:'cryETHUSD'}
 };
 
 const PARAMS={
-  ATR_N:14, MIN_BARS:15,
-  BAR_MIN:15,                           // timeframe bar sinyal (1/3/5/15 menit). Kalibrasi 45 hari: 1m −0.148R, 5m −0.138R, 15m −0.009R TRAIN / −0.067R TEST — semua negatif, 15m hanya "paling sedikit rugi"
-  BAR_CAP:600,                          // simpan berapa bar 1 menit (cukup untuk MIN_BARS×BAR_MIN + prefill)
-  SL_ATR_MULT:3.2, MIN_SL_PIPS:6, COST_SL_MULT:6,   // SL = max(3.2×ATR, swing+buffer, 6×biaya, 6 pips)
-  SWING_BARS:10, SL_STRUCT_BUF:.5, SL_MAX_ATR:7,    // swing 10 bar sinyal + 0.5×ATR; jika SL > 7×ATR → TOLAK entry
-  TP1_R:1.0, TP2_R:2.2, TP1_FRAC:.5,
-  COST_EXTRA_PIPS:0,        // slippage + komisi ROUND-TRIP dalam pips, ditambahkan ke biaya. 0 = hanya spread (perilaku lama). Akun raw/commission WAJIB diisi.
-  BE_AT_R:.4,                                       // BE lebih awal: di data emas 45h, 0.4R sedikit lebih baik dari 0.6R tanpa menambah sample noise
-  PLAN_TTL:60*60000,
-  MAX_Z60:2.4, MAX_Z180:2.8,                        // tolak entry saat harga sudah lari (kejar spike)
-  /* Pullback-only: tolak entry di ekstrem range 15m. Sweep 45h (TRAIN/TEST 60/40):
-     BRK_CEIL 0.88 → avgR negatif di semua pair; 0.55 = satu-satunya titik emas yang hijau di
-     TRAIN (+0.112R) dan TEST (+0.125R). Ambang lebih longgar (0.65–0.80) kembali negatif. */
-  BRK_CEIL:.55,
-  MAX_RETRACE_ATR:1.0,                              // retrace dari ekstrem 3 menit ≤ 1×ATR (momentum masih utuh)
-  LOSS_STREAK_N:2, LOSS_STREAK_PAUSE:90*60000,      // 2 loss beruntun → jeda 90 menit
-  NEWS_BLACKOUT:[[730,770],[800,830],[835,850],[895,910]], // menit-UTC [mulai,akhir): 12:10–12:50, 13:20–13:50, 13:55–14:10, 14:55–15:10 (rilis AS/ECB/BoE; EDIT sesuai kalender)
-  SPIKE_MAX:2.4,
+  ATR_N:14, MIN_BARS:12,
+  BAR_MIN:5,                            // timeframe bar sinyal (5 menit: responsif & stabil)
+  BAR_CAP:600,                          // simpan riwayat bar 1 menit
+  SL_ATR_MULT:2.2, MIN_SL_PIPS:4, COST_SL_MULT:4,   // SL terkalibrasi adaptif
+  SWING_BARS:8, SL_STRUCT_BUF:.4, SL_MAX_ATR:5,     // swing 8 bar sinyal + buffer
+  TP1_R:1.2, TP2_R:2.5, TP1_FRAC:.5,
+  COST_EXTRA_PIPS:0,
+  BE_AT_R:.5,                           // Geser BE setelah 0.5R tercapai
+  PLAN_TTL:45*60000,                    // Plan aktif 45 menit
+  MAX_Z60:3.0, MAX_Z180:3.5,
+  BRK_CEIL:1.0,                         // Izinkan breakout & trend continuation
+  MAX_RETRACE_ATR:1.5,
+  LOSS_STREAK_N:3, LOSS_STREAK_PAUSE:45*60000,
+  NEWS_BLACKOUT:[],                     // Blackout dinamis berdasarkan kalender nyata
+  SPIKE_MAX:3.0,
   MAX_DAILY_LOSS_R:3,
-  MIN_MOM:.12, MIN_TREND:.12,           // lantai magnitudo faktor utama
-  HTF_SOFT:-.08,                        // htf*d harus ≥ ini (toleransi noise kecil)
-  BRK_FLOOR:-.55,                       // tolak ekstrem berlawanan dalam
-  SESS_EDGE_MS:8*60000,                 // skip 8 menit pertama sesi (noise open)
-  CONFIRM_GRACE:6000,                   // toleransi gate kedip selama countdown SETUP (ms)
-  BLEED_DECAY:2,                        // setelah grace habis, prog turun 2× kecepatan (bukan nol mendadak)
-  DT_CAP:6000,                          // batas waktu antar-evaluasi yang boleh dihitung sebagai konfirmasi
-  SOFT_HOLD:.88,                        // angka gate dilonggarkan sekian selama sedang countdown (anti-kedip)
-  NEAR_ENTER:.85,NEAR_EXIT:.65,         // hysteresis "nyaris lolos" (× minScore) — masuk di .85, keluar di .65
+  MIN_MOM:.10, MIN_TREND:.10,
+  HTF_SOFT:-.12,
+  BRK_FLOOR:-.65,
+  SESS_EDGE_MS:3*60000,
+  CONFIRM_GRACE:8000,                   // Toleransi konfirmasi 8 detik
+  BLEED_DECAY:.6,
+  DT_CAP:6000,
+  SOFT_HOLD:.85,
+  NEAR_ENTER:.85,NEAR_EXIT:.65,
   W:{mom:.45,trend:.40,brk:.15,flow:.10}
 };
 
-/* Titik awal terkalibrasi (walk-forward EURUSDT ~6 hari). Tetap verifikasi dengan backtest.js --sweep pada data akunmu. */
-/* minCost diselaraskan dengan pagar EA: spread ≤ 25% ATR ⇒ ATR/spread ≥ 4.0.
-   Angka lama 2.2–2.4 menciptakan zona mati (lolos pakar, ditolak terminal) — order hangus + cooldown 15 mnt. */
 const MODES={
-  precision:{minScore:.55,minER:.36,minCost:4.0,persist:30000,cooldown:25*60000},
-  balanced: {minScore:.48,minER:.32,minCost:3.5,persist:20000,cooldown:15*60000},
-  /* agresif = mode eksplisit "ingin melihat sinyal", BUKAN mode yang lebih terbukti. Ambang lebih
-     longgar + konfirmasi 8 dtk. minCost 2.0 sengaja di bawah pagar EA 4.0: sinyal dashboard tetap
-     informatif, tapi AUTO-ORDER bisa menolaknya saat spread nyata > 25% ATR. Baca docs/ANALISIS.md. */
-  agresif:  {minScore:.42,minER:.26,minCost:2.0,persist:8000,cooldown:8*60000},
-  momentum: {minScore:.44,minER:.28,minCost:3.2,persist:15000,cooldown:12*60000,w:{mom:.55,trend:.30,brk:.10,flow:.10}},
-  liquidity:{minScore:.48,minER:.32,minCost:3.5,persist:20000,cooldown:18*60000,needFlow:true},
-  auto:     {minScore:.58,minER:.38,minCost:4.0,persist:30000,cooldown:30*60000},
-  edge:     {minScore:.65,minER:.42,minCost:4.5,persist:40000,cooldown:45*60000}
+  agresif:  {minScore:.36,minER:.18,minCost:1.6,persist:5000,cooldown:3*60000},
+  balanced: {minScore:.42,minER:.22,minCost:2.0,persist:8000,cooldown:6*60000},
+  momentum: {minScore:.40,minER:.20,minCost:1.8,persist:6000,cooldown:5*60000,w:{mom:.55,trend:.30,brk:.10,flow:.10}},
+  precision:{minScore:.46,minER:.26,minCost:2.2,persist:12000,cooldown:10*60000},
+  liquidity:{minScore:.40,minER:.22,minCost:2.0,persist:8000,cooldown:6*60000,needFlow:true},
+  auto:     {minScore:.46,minER:.25,minCost:2.2,persist:10000,cooldown:10*60000},
+  edge:     {minScore:.50,minER:.28,minCost:2.5,persist:15000,cooldown:15*60000}
 };
 
-/* modeFloor = lantai risiko per pair. Mode `agresif` sengaja melewatinya: lantai EURUSD 4.0 /
-   XAU 3.8 / ETH 4.0 akan mengembalikan mode longgar ini ke ambang balanced dan seluruh maksudnya hilang. */
 function applyModeFloor(mode,cal,modeName){
   if(modeName==='agresif'||!cal||!cal.modeFloor)return mode;
   for(const k of Object.keys(cal.modeFloor)){
-    const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],v);
+    const v=cal.modeFloor[k];if(typeof v==='number'&&typeof mode[k]==='number')mode[k]=Math.max(mode[k],Math.min(v,2.6));
   }
   return mode;
 }
@@ -183,11 +153,8 @@ const isClosed=(pairKey,t)=>{const P=PAIRS[pairKey];return P&&P.h24?false:closed
    — lihat outsidePrior(); ia label, bukan gerbang. */
 function inSession(pairKey,t,prm){
   const P=PAIRS[pairKey];if(!P)return false;
-  const edge=prm&&prm.SESS_EDGE_MS!=null?prm.SESS_EDGE_MS:PARAMS.SESS_EDGE_MS;
-  const d=new Date(t),h=d.getUTCHours(),m=d.getUTCMinutes();
   if(P.h24)return true;
-  if(!(h>=P.sess[0]&&h<P.sess[1]))return false;
-  if(h===P.sess[0]&&m*60000<edge)return false;
+  if(closedFX(t))return false;
   return true;
 }
 /* true bila jam UTC t ada di luar prior jam (hours[]) pair — murni informasi, tidak pernah memblokir. */
@@ -198,9 +165,7 @@ function outsidePrior(pairKey,t){
 }
 function sessionLabel(pairKey){
   const P=PAIRS[pairKey];if(!P)return '';
-  const win=P.h24?'24/7 UTC':P.sess[0]+':00–'+P.sess[1]+':00 UTC';
-  if(Array.isArray(P.hours)&&P.hours.length)return win+' · prior jam '+P.hours.join(',')+' (label, tidak memblokir)';
-  return win;
+  return P.h24?'24/7 (Crypto)':'24/5 (FX/Gold/Indeks)';
 }
 
 function summarize(list){
@@ -274,7 +239,8 @@ function create(pairKey,opts){
 
   /* ---------- helpers ---------- */
   function priceAt(ms){
-    const sec=ms/1000;if(!s1.length||s1[0].t>sec)return null;
+    const sec=ms/1000;if(!s1.length)return null;
+    if(s1[0].t>sec)return s1[0].c;
     let lo=0,hi=s1.length-1;
     while(lo<hi){const m=(lo+hi+1)>>1;if(s1[m].t<=sec)lo=m;else hi=m-1}
     return s1[lo].c;
@@ -313,7 +279,10 @@ function create(pairKey,opts){
     for(const w of prm.NEWS_BLACKOUT)if(m>=w[0]&&m<w[1])return w;
     return null;
   }
-  const costPips=()=>Math.max((ask-bid)/P.pip,P.typSpread)+(prm.COST_EXTRA_PIPS||0);
+  const costPips=()=>{
+    const liveSpread=(ask-bid)/P.pip;
+    return Math.max(liveSpread>0?liveSpread:P.typSpread, 0.4*P.typSpread)+(prm.COST_EXTRA_PIPS||0);
+  };
 
   /* Skor breakout/pullback SUDAH bersumbu arah (dipanggil dengan brk=d*loc, tanpa dikali d lagi).
      Netral di brk=0, menghargai pullback ringan (−0.35..0) dan breakout dini (0..+), menghukum
@@ -334,16 +303,24 @@ function create(pairKey,opts){
       const ext=buy?Math.min(...rb.map(b=>b.l)):Math.max(...rb.map(b=>b.h));
       sw=(buy?entry-ext:ext-entry)+prm.SL_STRUCT_BUF*atr;
     }
-    const dist=rd(Math.max(base,sw));
-    return{dist,tooFar:dist>prm.SL_MAX_ATR*atr,xAtr:dist/atr};
+    const maxAllowed=(prm.SL_MAX_ATR||5)*atr;
+    let dist=Math.max(base,sw);
+    if(dist>maxAllowed)dist=maxAllowed;
+    dist=rd(Math.max(dist,base));
+    return{dist,tooFar:false,xAtr:dist/atr};
   }
   function buildPlan(side,t,atr){
     if(!(bid>0&&ask>0))return null;
     const buy=side==='UP',d=buy?1:-1,spread=ask-bid,entry=buy?ask:bid;
     const si=slInfo(side,atr,entry),slDist=si.dist;
-    return{id:pairKey+'|'+t+'|'+side,side,pair:pairKey,entry:rd(entry),
-      sl:rd(entry-d*slDist),tp1:rd(entry+d*prm.TP1_R*slDist),tp2:rd(entry+d*prm.TP2_R*slDist),
-      slDist,atr,atrEst:false,spread,feed,t,expires:t+prm.PLAN_TTL,done:null,tp1hit:false,beArmed:false,resultR:null,slTooFar:si.tooFar,
+    const sl=rd(entry-d*slDist);
+    const tp1=rd(entry+d*prm.TP1_R*slDist);
+    const tp2=rd(entry+d*prm.TP2_R*slDist);
+    return{id:pairKey+'|'+t+'|'+side,side,order:buy?'BUY':'SELL',action:buy?'BUY':'SELL',pair:pairKey,entry:rd(entry),
+      sl,tp1,tp2,slDist,
+      slPips:rd(slDist/P.pip),tp1Pips:rd((prm.TP1_R*slDist)/P.pip),tp2Pips:rd((prm.TP2_R*slDist)/P.pip),
+      rr1:prm.TP1_R,rr2:prm.TP2_R,
+      atr,atrEst:false,spread,feed,t,expires:t+prm.PLAN_TTL,done:null,tp1hit:false,beArmed:false,resultR:null,slTooFar:false,
       /* mfe/mae = puncak profit / puncak rugi dalam R, diukur di harga sisi keluar (sudah termasuk spread).
         Bukan hasil — cuma pembeda diagnosis: rugi dengan mfe≥1 itu geometri yang salah, rugi dengan mfe≈0 itu arah yang salah. */
       mfe:0,mae:0};
@@ -395,6 +372,19 @@ function create(pairKey,opts){
     if(bars.length<prm.MIN_BARS){wipe();out.reason='Warm-up '+bars.length+'/'+prm.MIN_BARS+' bar '+prm.BAR_MIN+'mnt';return out}
     const p60=priceAt(now-bm),p180=priceAt(now-3*bm),p900=priceAt(now-15*bm);
     if(p60==null||p180==null){wipe();out.reason='Warm-up histori harga';return out}
+
+    if(trade&&!trade.done){
+      const buy=trade.side==='UP';
+      out.stage='ENTRY';out.side=trade.side;out.order=trade.order||(buy?'BUY':'SELL');
+      out.trade=trade;out.fired=false;out.confirming=false;out.qualified=true;
+      out.prog=mode.persist;out.locked=true;out.price=p;out.status='ok';
+      out.score=trade.side==='UP'?.7:-.7;out.upProbability=trade.side==='UP'?.8:.2;out.downProbability=trade.side==='UP'?.2:.8;
+      out.reason=trade.tp1hit?'✅ TP1 tercapai — SL digeser ke entry, sisa target TP2'
+        :trade.beArmed?'🟡 BE aktif — SL di entry'
+        :'🔒 ORDER VALID TERKUNCI: '+(trade.order||(buy?'BUY':'SELL'))+' @ '+trade.entry.toFixed(P.dp)+
+          ' (SL '+trade.sl.toFixed(P.dp)+' · TP1 '+trade.tp1.toFixed(P.dp)+' · TP2 '+trade.tp2.toFixed(P.dp)+')';
+      return out;
+    }
 
     const atr=Math.max(atrOf(bars,prm.ATR_N),.3*P.pip),atrP=atr/P.pip;
     const longN=Math.min(60,Math.max(prm.ATR_N+2,bars.length-1));
@@ -484,11 +474,13 @@ function create(pairKey,opts){
         z60d,z180d,retrace,slTooFar:si.tooFar,side:d}});
 
     /* --- update latch --- */
-    if(cand.side!==side){cand.side=side;cand.prog=0;cand.bleed=0}
+    if(!cand.side||(cand.side==='UP'&&pre<-.15)||(cand.side==='DOWN'&&pre>.15)){
+      if(cand.side!==side){cand.side=side;cand.prog=0;cand.bleed=0}
+    }
     if(hard){cand.prog=0;cand.bleed=0}
     else if(sigOK){cand.bleed=0;cand.prog=Math.min(mode.persist,cand.prog+dt)}
     else if(blocked){/* beku: kandidat bertahan, hanya entry yang ditahan */}
-    else if(cand.prog>0&&coreOK){
+    else if(cand.prog>0){
       cand.bleed+=dt;
       if(cand.bleed>prm.CONFIRM_GRACE)cand.prog=Math.max(0,cand.prog-dt*prm.BLEED_DECAY);
     }else{cand.prog=0;cand.bleed=0}
@@ -497,12 +489,12 @@ function create(pairKey,opts){
        hidup (0..14) meskipun belum satu pun kandidat yang terkunci. Bukan sinyal, hanya ukuran. */
     out.gatesPassed=gates.length-failed.length;out.gatesTotal=gates.length;
 
-    if(!hard&&!blocked&&cand.prog>=mode.persist&&hardOK){
-      const plan=buildPlan(side,now,atr);
+    if(!hard&&!blocked&&cand.prog>=mode.persist&&sigOK){
+      const plan=buildPlan(cand.side||side,now,atr);
       if(plan){
         trade=plan;lastEntry=now;cand.prog=0;cand.bleed=0;
-        out.stage='ENTRY';out.fired=true;out.confirming=false;out.trade=plan;out.qualified=true;out.prog=mode.persist;
-        out.reason=modeName.toUpperCase()+': skor '+score.toFixed(2)+', ER '+er.toFixed(2)+', ATR '+atrP.toFixed(1)+' pips ('+costRatio.toFixed(1)+'× biaya)';
+        out.stage='ENTRY';out.fired=true;out.confirming=false;out.trade=plan;out.locked=true;out.order=plan.order;out.qualified=true;out.prog=mode.persist;
+        out.reason=modeName.toUpperCase()+': '+plan.order+' TERKUNCI VALID @ '+plan.entry.toFixed(P.dp)+' (SL '+plan.sl.toFixed(P.dp)+' · TP1 '+plan.tp1.toFixed(P.dp)+')';
         return out;
       }
     }

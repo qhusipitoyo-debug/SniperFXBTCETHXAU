@@ -9,14 +9,16 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner FX crosses/indices + XAU/BTC/ETH • harga dan history 1m dari aiterminaltrading</p></div></div>
+  <div class="brand"><div class="brandMark">FX</div><div><h1>FX <span>SNIPER</span></h1><p>Multi-scanner FX + XAU/BTC/ETH • Live WebSocket Binance &amp; Deriv</p></div></div>
   <div class="topActions">
     <div class="connection"><i id="binanceDot"></i><span id="feedLabel">FEED</span></div>
-    <select id="feedSelect" disabled aria-label="Satu-satunya sumber market">
-      <option value="aiterminaltrading">AITERMINALTRADING (14 pair)</option>
+    <select id="feedSelect" aria-label="Sumber market feed">
+      <option value="hybrid" selected>BINANCE + DERIV (Semua 14 Pair)</option>
+      <option value="deriv">DERIV SAJA (14 Pair FX/Gold/Crypto)</option>
+      <option value="binance">BINANCE SAJA (BTC, ETH, PAXG, EUR)</option>
     </select>
     <select id="modeSelect">
-      <option value="agresif" selected>AGRESIF (longgar)</option>
+      <option value="agresif" selected>AGRESIF (responsif)</option>
       <option value="balanced">BALANCED</option>
       <option value="precision">PRECISION</option>
       <option value="momentum">MOMENTUM</option>
@@ -48,7 +50,7 @@
       </div>
       <div class="countdown"><small>FEED AGE</small><strong id="binanceFeed">—</strong><em>LAST TICK</em></div>
     </div>
-    <div class="heroFooter"><span id="status">Connecting live feeds…</span><span id="aitermSnapshot" class="heroStatus live">Snapshot aiterminaltrading…</span></div>
+    <div class="heroFooter"><span id="status">Connecting live feeds…</span><span id="aitermSnapshot" class="heroStatus live">Binance &amp; Deriv Live</span></div>
   </section>
 
   <section class="panel alertPanel">
@@ -188,11 +190,11 @@
 </main>
 
 <footer>
-  <span>MULTI SCANNER v9 • scanner informational • semua data market dari aiterminaltrading, dihitung lokal di halaman ini, tidak ada order dan tidak ada koneksi broker</span>
+  <span>MULTI SCANNER • Live WebSocket Binance &amp; Deriv • Sinyal &amp; Plan Terkunci Dihitung Lokal di Browser</span>
   <span><button id="exportTicks">Export ticks</button> <button id="clear">Clear history</button></span>
 </footer>
 
-<script src="engine.js?v=14"></script>
-<script src="app.js?v=29"></script>
+<script src="engine.js?v=15"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

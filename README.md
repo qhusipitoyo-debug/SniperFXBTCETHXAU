@@ -6,38 +6,30 @@ Dikonversi dari XAUUSD Sniper. Semua berjalan lokal di browser — scanner infor
 
 EUR/USD (Fiber) • USD/JPY (Gopher) • GBP/USD (Cable) • USD/CHF (Swissie) • AUD/USD (Aussie) • USD/CAD (Loonie) • NZD/USD (Kiwi) • GBP/JPY • EUR/JPY • Nasdaq 100 • S&P 500 • XAU/USD (Gold) • BTC/USD • ETH/USD
 
-## Feed (satu sumber saja: aiterminaltrading)
+## Feed (Live WebSocket: Binance & Deriv)
 
-Live page hanya membaca:
+Live feed real-time langsung ke WebSocket resmi Binance & Deriv tanpa polling tertunda:
 
-`https://pitoyict13-droid.github.io/aiterminaltrading/data/markets.json`
+- **HYBRID (Default & Rekomendasi)**:
+  - **Binance WebSocket** (`wss://data-stream.binance.vision`): Stream real-time bookTicker dan trade flow imbalance untuk Crypto (`BTC/USD`, `ETH/USD`), Gold (`PAXG/USDT`), dan EUR (`EUR/USDT`).
+  - **Deriv WebSocket** (`wss://api.derivws.com/trading/v1/options/ws/public`): Stream real-time ticks dan candle history untuk Forex majors, crosses, indices (`NAS100` / `OTC_NDX`, `US500` / `OTC_SPC`), dan Gold.
+  - Keduanya berjalan simultan secara multi-channel sehingga seluruh 14 pair aktif live secara real-time.
+- **DERIV SAJA**: Seluruh 14 pair dilanggan via WebSocket Deriv publik (`frx...`, `cry...`, `OTC_...`).
+- **BINANCE SAJA**: Khusus pair yang tersedia di Binance (`BTCUSDT`, `ETHUSDT`, `PAXGUSDT`, `EURUSDT`).
 
-Payload ini dibuat oleh GitHub Actions di repo `aiterminaltrading` setiap 15 menit. Isi: XAU/USD, BTC/USD, ETH/USD dan seluruh pasangan FX di atas, plus history 1-menit Yahoo Finance. Tidak ada panggilan langsung ke Binance, Deriv, OANDA, Capital.com atau sumber lain di feed live.
-
-| Sumber di dalam aiterminaltrading | Pair | Peran |
-|---|---|---|
-| OANDA (TradingView) | seluruh major FX + crosses | harga spot saat ini |
-| gold-api | XAU/USD | harga spot saat ini |
-| Binance / CoinGecko | BTC/USD, ETH/USD | harga saat ini |
-| Yahoo Finance 1m | seluruh pair | history chart/ATR |
-
-`bid`/`ask` disintesis sama dengan harga spot; biaya tetap dihitung lewat `typSpread`. Data diperbarui setiap ±15 menit, jadi feed **bukan real-time tick** — chart/sinyal ikut snapshot yang sama dengan aiterminaltrading.
-
-Opsi feed lain sengaja tidak ditampilkan di UI live supaya tidak ada sumber market yang berbeda dengan aiterminaltrading.
-
-Kartu PLAN SIAP menampilkan badge **STAT**: informasi statistik replay lama (n, winrate, avgR/PF) dengan tooltip yang menjelaskan sumber datanya. Badge ini hanya referensi; **tidak memblokir atau menyaring sinyal**. Data statistik lama bukan feed live aiterminaltrading dan harus diperlakukan sebagai bahan evaluasi, bukan jaminan.
+Tidak ada lagi ketergantungan pada polling berkala `markets.json` 15 menit — semua sinyal, latch countdown, dan locking dihitung secara live di browser dari data tick murni.
 
 ## Mode scan (dropdown `MODE`)
 
 | mode | minScore | minER | minCost | persist | Catatan |
 |---|---|---|---|---|---|
-| `agresif` | 0,42 | 0,26 | 2,0 | 8 s | **default 3-11-2026**; paling longgar, untuk melihat sinyal. Bukan klaim edge. |
-| `balanced` | 0,48 | 0,32 | 3,5 | 20 s | titik awal walk-forward lama |
-| `precision` | 0,55 | 0,36 | 4,0 | 30 s | paling ketat |
-| `momentum` | 0,44 | 0,28 | 3,2 | 15 s | bobot mom lebih besar |
-| `liquidity` | 0,48 | 0,32 | 3,5 | 20 s | wajib ada order flow |
-| `auto` | 0,58 | 0,38 | 4,0 | 30 s | ambang tinggi |
-| `edge` | 0,65 | 0,42 | 4,5 | 40 s | paling ketat + cooldown panjang |
+| `agresif` | 0,36 | 0,18 | 1,6 | 5 s | Paling responsif; konfirmasi cepat 5 detik untuk mendeteksi momentum awal. |
+| `balanced` | 0,42 | 0,22 | 2,0 | 8 s | Mode seimbang antara filter noise dan kecepatan eksekusi. |
+| `momentum` | 0,40 | 0,20 | 1,8 | 6 s | Bobot momentum lebih dominan (mom 0.55, trend 0.30). |
+| `precision` | 0,46 | 0,26 | 2,2 | 12 s | Lebih selektif dengan persist 12 detik. |
+| `liquidity` | 0,40 | 0,22 | 2,0 | 8 s | Membutuhkan order flow imbalance positif dari Binance. |
+| `auto` | 0,46 | 0,25 | 2,2 | 10 s | Auto Edge seimbang. |
+| `edge` | 0,50 | 0,28 | 2,5 | 15 s | Mode seleksi edge maksimum dengan cooldown lebih panjang. |
 
 `agresif` sengaja melewati `calib.modeFloor` (lantai EURUSD 4,0 / XAU 3,8 / ETH 4,0), kalau tidak
 mode ini langsung kembali ke ambang `balanced`. `minCost:2,0` ada di bawah pagar EA (25% ATR ⇒ 4,0),

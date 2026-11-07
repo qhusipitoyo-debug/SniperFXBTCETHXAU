@@ -60,9 +60,9 @@ if(REPLAY){
   if(!has('out'))OUT=OUT.replace(/\.json$/,'')+'.replay.json';
 }
 const DERIV_WS='wss://api.derivws.com/trading/v1/options/ws/public';
-const BINANCE_WS=['wss://stream.binance.com:9443','wss://stream.binance.com','wss://data-stream.binance.vision']
+const BINANCE_WS=['wss://data-stream.binance.vision','wss://stream.binance.com:9443','wss://stream.binance.com']
   .map(h=>h+'/stream?streams=');
-const BINANCE_REST=['https://api.binance.com','https://data-api.binance.vision'];
+const BINANCE_REST=['https://data-api.binance.vision','https://api.binance.com'];
 const STALE_RECONNECT=60000;   /* tidak ada pesan sama sekali selama ini → sambung ulang */
 const STATUS_EVERY=300000;     /* baris detak jantung: 5 menit */
 
