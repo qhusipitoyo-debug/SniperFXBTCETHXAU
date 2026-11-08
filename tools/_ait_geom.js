@@ -145,16 +145,20 @@ function replay(rows, TS, tr, g, pair, tab) {
   const buf = g.beBuf ? tr.spread + 2 * pip : 0;
   const F = g.frac || 0;
   const tEnd = g.ttl ? tr.t + g.ttl : Infinity;
-  let sl = tr.entry - d * slD, tp1hit = false, beArmed = false;
+  let sl = tr.entry - d * slD, tp1hit = false, beArmed = false, beAtR = null;
   const i0 = (() => { let lo = 0, hi = TS.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (TS[m] <= tr.t) { r = m; lo = m + 1 } else hi = m - 1 } return r; })();
   for (let i = i0 + 1; i < rows.length; i++) {
     const t = rows[i][0], px = buy ? rows[i][1] : rows[i][2];
     const r = (buy ? px - tr.entry : tr.entry - px) / slD;
     if (buy ? px <= sl : px >= sl) {
       const be = tp1hit || beArmed;
-      return { why: be ? (tp1hit ? 'BE/TP1' : 'BE') : 'SL', R: (tp1hit ? F * g.tp1R + (1 - F) * r : r) - (P0.COST_EXTRA_PIPS || 0) * pip / slD };
+      /* BE sebelum TP1 (beR < tp1R, e.g. BE 0,5R < TP1 1,2R) -> profit TERKUNCI = r saat dipicu.
+         Replica ini harus sama dengan engine: kalau BE dipicu sebelum TP1, close di breakeven
+         = menutup seluruh posisi -> R = beAtR (profit terkunci), bukan r (≈0). */
+      const beRg = be ? (tp1hit ? F * g.tp1R + (1 - F) * r : (beAtR != null ? beAtR : g.beR)) : r;
+      return { why: be ? (tp1hit ? 'BE/TP1' : 'BE') : 'SL', R: beRg - (P0.COST_EXTRA_PIPS || 0) * pip / slD };
     }
-    if (beD && !tp1hit && !beArmed && r >= g.beR) { beArmed = true; sl = tr.entry + d * buf; }
+    if (beD && !tp1hit && !beArmed && r >= g.beR) { beArmed = true; beAtR = r; sl = tr.entry + d * buf; }
     if (tp1 && !tp1hit && (buy ? px >= tr.entry + tp1 : px <= tr.entry - tp1)) { tp1hit = true; sl = tr.entry + d * buf; }
     if (tp2 && (tp1hit || !tp1) && (buy ? px >= tr.entry + tp2 : px <= tr.entry - tp2))
       return { why: tp1 ? 'TP2' : 'TP', R: (tp1 ? F * g.tp1R + (1 - F) * g.tp2R : g.tp2R) - (P0.COST_EXTRA_PIPS || 0) * pip / slD };
