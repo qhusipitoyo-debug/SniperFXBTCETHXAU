@@ -320,7 +320,7 @@ function create(pairKey,opts){
       sl,tp1,tp2,slDist,
       slPips:rd(slDist/P.pip),tp1Pips:rd((prm.TP1_R*slDist)/P.pip),tp2Pips:rd((prm.TP2_R*slDist)/P.pip),
       rr1:prm.TP1_R,rr2:prm.TP2_R,
-      atr,atrEst:false,spread,feed,t,expires:t+prm.PLAN_TTL,done:null,tp1hit:false,beArmed:false,resultR:null,slTooFar:false,
+      atr,atrEst:false,spread,feed,t,expires:t+prm.PLAN_TTL,done:null,tp1hit:false,beArmed:false,beAtR:0,resultR:null,slTooFar:false,
       /* mfe/mae = puncak profit / puncak rugi dalam R, diukur di harga sisi keluar (sudah termasuk spread).
         Bukan hasil — cuma pembeda diagnosis: rugi dengan mfe≥1 itu geometri yang salah, rugi dengan mfe≈0 itu arah yang salah. */
       mfe:0,mae:0};
@@ -340,9 +340,17 @@ function create(pairKey,opts){
     if(buy?px<=tr.sl:px>=tr.sl){
       const r=rOf(px);
       const be=tr.tp1hit||tr.beArmed;
-      finish(be?'BE':'SL',tr.tp1hit?F*prm.TP1_R+(1-F)*r:r);return ev;
+      /* BE = tutup di breakeven. Kalau TP1 sudah terpicu → sebagian profit F×TP1_R sudah
+         dikunci, sisanya menutup di entry (≈0) → rg = F*TP1_R+(1-F)*r.
+         Kalau BE dipicu SEBELUM TP1 (BE_AT_R=0,5 < TP1_R=1,2 → legit, v4 "BE lebih awal") →
+         seluruh posisi menutup di entry, profit TERKUNCI = beAtR saat dipicu → rg = beAtR.
+         Sebelumnya pakai `r` (≈0) di kasus ini, jadi trade yang sebenarnya beruntung
+         (BE = profit terkunci) dicatat sebagai rugi → merusak avgR/PF dan melabeli hasil
+         "JELEK" padahal exit-nya sendiri sehat. */
+      const beRg=be?(tr.tp1hit?F*prm.TP1_R+(1-F)*r:tr.beAtR!=null?tr.beAtR:prm.BE_AT_R):r;
+      finish(be?'BE':'SL',beRg);return ev;
     }
-    if(prm.BE_AT_R>0&&!tr.tp1hit&&!tr.beArmed&&rOf(px)>=prm.BE_AT_R){tr.beArmed=true;tr.sl=tr.entry;ev.push({type:'BE',trade:tr})}
+    if(prm.BE_AT_R>0&&!tr.tp1hit&&!tr.beArmed&&rOf(px)>=prm.BE_AT_R){tr.beArmed=true;tr.sl=tr.entry;tr.beAtR=rOf(px);ev.push({type:'BE',trade:tr})}
     if(!tr.tp1hit&&(buy?px>=tr.tp1:px<=tr.tp1)){tr.tp1hit=true;tr.tp1At=t;tr.sl=tr.entry;ev.push({type:'TP1',trade:tr})}
     if(tr.tp1hit&&(buy?px>=tr.tp2:px<=tr.tp2)){finish('TP2',F*prm.TP1_R+(1-F)*rOf(px));return ev}
     if(t>tr.expires){const r=rOf(px);finish('TIME',tr.tp1hit?F*prm.TP1_R+(1-F)*r:r)}
