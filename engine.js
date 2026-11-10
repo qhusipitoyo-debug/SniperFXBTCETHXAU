@@ -59,7 +59,7 @@ let _newsProvider=null;
            operator sebagai PENEBAT RISIKO berlabel, bukan sebagai kalibrasi yang terbukti menaikkan PF. */
 const PAIRS={
   EURUSD:{name:'EUR/USD',nick:'Fiber',  pip:.0001,dp:5,quoteUSD:true, maxSpread:3.2, typSpread:1.0,sess:[0,24],
-    hours:[7,8,9,10,11,12,13,14,15], binance:'eurusdt',deriv:'frxEURUSD'},
+    hours:[7,8,9,10,11,12,13,14,15], binance:null,deriv:'frxEURUSD'},
   USDJPY:{name:'USD/JPY',nick:'Gopher', pip:.01,  dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,12,13,14,15], binance:null,deriv:'frxUSDJPY'},
   GBPUSD:{name:'GBP/USD',nick:'Cable',  pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
@@ -80,13 +80,13 @@ const PAIRS={
     hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_NDX'},
   US500:{name:'S&P 500',nick:'SP500',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:80,typSpread:1.0,sess:[0,24],
     hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_SPC'},
-  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:8,  typSpread:1.8,sess:[0,24],
+  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:6.0,typSpread:2.5,sess:[0,24],
     hours:[7,8,10,11,13,15],
-    binance:'paxgusdt',deriv:'frxXAUUSD'},
-  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:2.5, sess:[0,24],
+    binance:null,deriv:'frxXAUUSD'},
+  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:1.0, sess:[0,24],
     hours:[8,9,19,23],
     binance:'btcusdt', deriv:'cryBTCUSD'},
-  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.5, sess:[0,24],
+  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.0, sess:[0,24],
     hours:[0,2,4,10,11,12,17,19],
     binance:'ethusdt', deriv:'cryETHUSD'}
 };

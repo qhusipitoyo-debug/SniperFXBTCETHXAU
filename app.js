@@ -17,7 +17,7 @@ const ALL_KEYS=Object.keys(PAIRS);
 const FEEDS={
   hybrid:{label:'Binance + Deriv (Hybrid)',short:'HYBRID',stale:15000,flow:true},
   deriv: {label:'Deriv (14 Pair)',        short:'DERIV', stale:20000,flow:false},
-  binance:{label:'Binance (USDT/PAXG)',   short:'BINANCE',stale:12000,flow:true}
+  binance:{label:'Binance (BTC/ETH USDT)', short:'BINANCE',stale:12000,flow:true}
 };
 const DERIV_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 const BINANCE_WS_HOSTS=['wss://data-stream.binance.vision','wss://stream.binance.com:9443','wss://stream.binance.com'];
@@ -289,7 +289,7 @@ function startDerivMulti(keys){
 function startHybridMulti(keys){
   clearFeedHelpers();feedNote='';lastWsMsg=Date.now();
   const binKeys=keys.filter(k=>!!PAIRS[k].binance);
-  const derivKeys=keys;
+  const derivKeys=keys.filter(k=>!PAIRS[k].binance);
   const stopBin=startBinanceMulti(binKeys);
   const stopDer=startDerivMulti(derivKeys);
   return()=>{try{stopBin()}catch{};try{stopDer()}catch{}};
