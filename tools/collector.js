@@ -31,6 +31,7 @@
 const fs=require('fs');
 const path=require('path');
 const E=require('../engine.js');
+const C=require('../context.js');
 
 const ROOT=path.resolve(__dirname,'..');
 const args=process.argv.slice(2);
@@ -55,9 +56,11 @@ const QUIET=flag('quiet');
    berkas keluaran diberi akhiran .replay DI SINI, sebelum ledger apa pun dibaca, supaya
    hasil uji tidak pernah membaca atau mencemari ledger live. */
 const REPLAY=opt('replay','');
+let OPEN_FILE=path.resolve(ROOT,opt('open','stats/open_trades.json'));
 if(REPLAY){
   if(!has('ledger'))LEDGER=LEDGER.replace(/\.jsonl$/,'')+'.replay.jsonl';
   if(!has('out'))OUT=OUT.replace(/\.json$/,'')+'.replay.json';
+  OPEN_FILE='';
 }
 const DERIV_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 const BINANCE_WS=['wss://data-stream.binance.vision','wss://stream.binance.com:9443','wss://stream.binance.com']
@@ -80,12 +83,74 @@ const KEYS=(opt('pairs','')?opt('pairs','').split(',').map(s=>s.trim().toUpperCa
   .filter(k=>FEED==='binance'?!!PAIRS[k].binance:!!PAIRS[k].deriv);
 if(!KEYS.length){console.error('tidak ada pair yang cocok untuk feed '+FEED);process.exit(1)}
 
+/* ---------- konteks berita & sentimen dari stats/calendar.json + stats/sentiment.json ---------- */
+const CAL_FILE=path.join(ROOT,'stats','calendar.json');
+const SENT_FILE=path.join(ROOT,'stats','sentiment.json');
+let calEvents=[],sentMacro=null,ctxLoadedAt=0;
+const latestMid={},sentAnchor={};
+
+function reloadContext(){
+  ctxLoadedAt=Date.now();
+  try{
+    if(fs.existsSync(CAL_FILE)){
+      const j=JSON.parse(fs.readFileSync(CAL_FILE,'utf8'));
+      const arr=Array.isArray(j)?j:(j&&Array.isArray(j.events)?j.events:[]);
+      calEvents=arr.map(C.newsNormalize).filter(Boolean);
+    }
+  }catch{}
+  try{
+    if(fs.existsSync(SENT_FILE))sentMacro=JSON.parse(fs.readFileSync(SENT_FILE,'utf8'));
+  }catch{}
+}
+function liveMacroMetrics(now){
+  const usd=[],risk=[];
+  for(const k of ['USDJPY','USDCHF','USDCAD']){
+    const m=latestMid[k],b=sentAnchor[k]&&sentAnchor[k].mid;
+    if(m>0&&b>0)usd.push(((m-b)/b)*100);
+  }
+  for(const k of ['EURUSD','GBPUSD','AUDUSD','NZDUSD']){
+    const m=latestMid[k],b=sentAnchor[k]&&sentAnchor[k].mid;
+    if(m>0&&b>0)usd.push(-((m-b)/b)*100);
+  }
+  for(const k of ['NAS100','US500','BTCUSD','ETHUSD']){
+    const m=latestMid[k],b=sentAnchor[k]&&sentAnchor[k].mid;
+    if(m>0&&b>0)risk.push(((m-b)/b)*100);
+  }
+  return {
+    usdScore:usd.length>=4?Math.max(-1,Math.min(1,(usd.reduce((a,b)=>a+b,0)/usd.length)/0.35)):null,
+    riskScore:risk.length>=2?Math.max(-1,Math.min(1,(risk.reduce((a,b)=>a+b,0)/risk.length)/0.6)):null
+  };
+}
+if(!REPLAY){
+  reloadContext();
+  E.setNewsProvider((pair,now)=>{
+    if(Date.now()-ctxLoadedAt>15*60000)reloadContext();
+    return C.newsBias(calEvents,pair,now,null,latestMid[pair]||0);
+  });
+  if(E.setSentimentProvider){
+    E.setSentimentProvider((pair,now)=>{
+      if(Date.now()-ctxLoadedAt>15*60000)reloadContext();
+      return C.pairSentimentBias(pair,sentMacro,liveMacroMetrics(now));
+    });
+  }
+}
+
 /* Satu engine per (pair × mode). Engine tidak tahu-menahu soal UI: ia terima tick,
    kembalikan kejadian, dan menyimpan plan yang selesai di .closed. */
 const engines=new Map();
+let savedOpen={};
+if(OPEN_FILE&&fs.existsSync(OPEN_FILE)){
+  try{savedOpen=JSON.parse(fs.readFileSync(OPEN_FILE,'utf8'))||{}}catch{savedOpen={}}
+}
 for(const pair of KEYS)for(const mode of MODES){
-  engines.set(pair+'|'+mode,E.create(pair,{mode,stale:FEED==='binance'?12000:20000,
-    hasFlow:FEED==='binance',feed:FEED}));
+  const key=pair+'|'+mode;
+  const eng=E.create(pair,{mode,stale:FEED==='binance'?12000:20000,
+    hasFlow:FEED==='binance',feed:FEED});
+  const tr=savedOpen[key];
+  if(tr&&!tr.done&&tr.pair===pair&&!seen.has(tr.id)&&eng.restoreTrade){
+    eng.restoreTrade(tr);
+  }
+  engines.set(key,eng);
 }
 
 const stat={startedAt:Date.now(),ticks:0,quotes:0,seeded:0,lastTickAt:0,wsMsg:0,reconnects:0,writes:0,errors:0};
@@ -165,6 +230,13 @@ function writeStats(){
   const tmp=OUT+'.tmp';
   fs.writeFileSync(tmp,JSON.stringify(json));
   fs.renameSync(tmp,OUT);   /* rename atomik: panel tidak pernah membaca berkas separuh */
+  if(OPEN_FILE){
+    const open={};
+    for(const [k,eng] of engines){const tr=eng.trade;if(tr&&!tr.done)open[k]=tr}
+    const otmp=OPEN_FILE+'.tmp';
+    fs.writeFileSync(otmp,JSON.stringify(open));
+    fs.renameSync(otmp,OPEN_FILE);
+  }
   stat.writes++;
 }
 
@@ -172,6 +244,9 @@ function writeStats(){
 let lastEval=0;
 function ingest(pair,bid,ask,now,flow){
   if(!(bid>0&&ask>0&&ask>=bid)||!PAIRS[pair])return;
+  const mid=(bid+ask)/2;
+  latestMid[pair]=mid;
+  if(!sentAnchor[pair]||(now-sentAnchor[pair].t)>3600000)sentAnchor[pair]={t:now,mid};
   stat.ticks++;stat.lastTickAt=now;
   for(const mode of MODES){
     const eng=engines.get(pair+'|'+mode);if(!eng)continue;
@@ -235,7 +310,7 @@ function openWS(url,onOpen,onMsg,label){
 
 /* ---------- prefill bar 1 menit supaya engine tidak mulai dari nol ---------- */
 const needBars=mode=>{const p=E.MODES[mode]&&E.MODES[mode].params?E.MODES[mode].params:E.PARAMS;
-  return Math.min(1000,((p.MIN_BARS||60)+3)*(p.BAR_MIN||1))};
+  return Math.min(1000,Math.max(320,(Math.max(p.MIN_BARS||12,62))*(p.BAR_MIN||1)))};
 function seed(eng,bars){try{const n=eng.seedBars(bars)||0;stat.seeded+=n;return n}catch{return 0}}
 
 async function prefillDeriv(ws){

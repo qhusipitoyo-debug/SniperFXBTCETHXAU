@@ -8,13 +8,13 @@
 # bisa diuji di luar Actions. Jalankan dengan PUBLISH_DRY=1 untuk melihat apa yang akan
 # terjadi tanpa menulis apa pun.
 #
-# Yang ditulis HANYA dua berkas keluaran collector. pair_stats.json dan seluruh kode tidak
-# disentuh — skrip ini tidak boleh jadi jalan diam-diam untuk mengubah hal lain.
+# Yang ditulis hanya keluaran collector & konteks pasar (calendar + sentiment).
+# pair_stats.json dan seluruh kode tidak disentuh.
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-FILES=(stats/live_ledger.jsonl stats/live_stats.json)
+FILES=(stats/live_ledger.jsonl stats/live_stats.json stats/open_trades.json stats/calendar.json stats/sentiment.json)
 BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
 DRY="${PUBLISH_DRY:-0}"
 

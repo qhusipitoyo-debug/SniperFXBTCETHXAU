@@ -157,7 +157,7 @@ global.setTimeout=(fn,ms)=>{captured.timeouts.push(fn);return 0};
 const errors=[];
 const _err=console.error;console.error=(...a)=>{errors.push(a.map(x=>String(x&&x.stack||x)).join(' '));_err(...a)};
 global.document=document;global.location=location;global.localStorage=localStorage;global.navigator=navigator;
-global.WebSocket=WebSocket;global.alert=alert;global.confirm=confirm;global.window=global;global.FXEngine=E;
+global.WebSocket=WebSocket;global.alert=alert;global.confirm=confirm;global.window=global;global.FXEngine=E;global.FXContext=require('../context.js');
 global.fetch=fetch;
 require('../app.js');
 

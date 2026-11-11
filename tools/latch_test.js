@@ -7,7 +7,8 @@
    Pakai: node tools/latch_test.js [EURUSDT|PAXGUSDT|BTCUSDT|ETHUSDT] [hariTerakhir] */
 const fs=require('fs'),path=require('path'),E=require('../engine.js');
 const SYM=process.argv[2]||'EURUSDT',DAYS=Number(process.argv[3]||7);
-const PAIR=Object.keys(E.PAIRS).find(k=>(E.PAIRS[k].binance||'')===SYM.toLowerCase());
+const PAIR=E.PAIRS[SYM]?SYM:Object.keys(E.PAIRS).find(k=>(E.PAIRS[k].binance||'')===SYM.toLowerCase());
+if(!PAIR){console.error('Pair tidak dikenal: '+SYM);process.exit(1)}
 const file=path.join(__dirname,'..','data',SYM+'_1m.csv');
 const rows=[];
 for(const l of fs.readFileSync(file,'utf8').split('\n')){const c=l.split(',');if(c.length<3)continue;const t=Number(c[0]);if(!t)continue;rows.push([t,Number(c[1]),Number(c[2])])}

@@ -33,7 +33,7 @@ on:
       segmen:
         description: 'Panjang satu segmen dalam menit sebelum commit+push'
         type: string
-        default: '30'
+        default: '90'
 
 # Satu collector saja: kalau ada dua instance menulis ledger yang sama, barisnya duplikat
 # dan angka winrate tidak bisa lagi dipercaya. Antrean cron tidak akan menumpuk — Actions
@@ -61,17 +61,18 @@ jobs:
           FEED: ${{ inputs.feed || 'deriv' }}
           MODES: ${{ inputs.modes || 'balanced' }}
           HOURS: ${{ inputs.hours || '5' }}
-          SEGMIN: ${{ inputs.segmen || '30' }}
+          SEGMIN: ${{ inputs.segmen || '90' }}
         run: |
           # Angka mentah dari input workflow_dispatch: paksa jadi bilangan, kalau bukan → default.
           num() { case "$1" in ''|*[!0-9]*) echo "$2";; *) echo "$1";; esac; }
           H=$(num "${HOURS:-5}" 5); if [ "$H" -gt 5 ]; then H=5; fi
-          SEG=$(num "${SEGMIN:-30}" 30); if [ "$SEG" -lt 5 ]; then SEG=5; fi
+          SEG=$(num "${SEGMIN:-90}" 90); if [ "$SEG" -lt 5 ]; then SEG=5; fi
           END=$(( $(date +%s) + H * 3600 ))
           n=0
           while [ "$(date +%s)" -lt "$END" ]; do
             n=$((n + 1))
             echo "::group::segmen $n — collector $(date -u +'%H:%M') +${SEG}m"
+            node tools/fetch_context.js || echo "fetch_context gagal — lanjut pakai cache"
             # SIGTERM ditangani collector sebagai "flush lalu keluar 0". --preserve-status
             # wajib: tanpa itu `timeout` selalu mengembalikan 124 untuk segmen yang berakhir
             # sesuai rencana, dan setiap segmen akan terbaca seperti kegagalan.

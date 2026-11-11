@@ -140,7 +140,7 @@ function seedEng(eng,bars){
 
 function needBars(pair){
   const p=engines[pair]?engines[pair].params():E.PARAMS;
-  return Math.min(1000,Math.max(120,(p.MIN_BARS+5)*(p.BAR_MIN||1)));
+  return Math.min(1000,Math.max(320,(Math.max(p.MIN_BARS||12,62))*(p.BAR_MIN||1)));
 }
 
 async function prefillBinancePair(pair,sym){
@@ -311,66 +311,18 @@ function buildEngines(keys){
 }
 
 let feedClosedAt=null;   // status bursa saat feed terakhir dilanggan — kalau berbalik (Jumat 22:00 / Minggu 22:00 / libur) feed disusun ulang
-/* ---------- berita dinamis dari kalender (sumber: aiterminaltrading) ---------- */
-const NEWS_CAL_URL='https://pitoyict13-droid.github.io/aiterminaltrading/data/calendar.json';
+/* ---------- berita kalender + sentimen pasar (stats/calendar.json + stats/sentiment.json + CORS live) ---------- */
+const NEWS_CAL_URL='stats/calendar.json';
+const SENTIMENT_URL='stats/sentiment.json';
+const FNG_LIVE_URL='https://api.alternative.me/fng/?limit=2';
+const BINANCE_24H_URL='https://data-api.binance.vision/api/v3/ticker/24hr?symbols='+encodeURIComponent(JSON.stringify(['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','PAXGUSDT','EURUSDT']));
+const C=window.FXContext||{};
 let NEWS_EVENTS=[];
+let MARKET_SENTIMENT=null;
 let NEWS_LAST_FETCH=0;
 const NEWS_REFRESH_MS=15*60*1000;
+const SENT_BASE={}; // {pair:{t,mid}} anchor untuk menghitung USD/Risk breadth intraday
 
-function newsCountryCode(c){
-  const u=String(c||'').trim().toUpperCase();
-  return ({'UNITED STATES':'USD','US':'USD','USA':'USD','CANADA':'CAD','CA':'CAD','EUROZONE':'EUR','EURO AREA':'EUR','UK':'GBP','UNITED KINGDOM':'GBP','JAPAN':'JPY','AUSTRALIA':'AUD','NEW ZEALAND':'NZD'}[u]||u);
-}
-function newsNum(v){
-  if(v===null||v===undefined||String(v).trim()===''||v==='-'||v==='—')return null;
-  const raw=String(v).trim().replace(/,/g,'');
-  const m=raw.match(/^([+-]?\d*\.?\d+)\s*([KMB])?%?$/i);
-  let n; let suf='';
-  if(m){n=Number(m[1]);suf=(m[2]||'').toUpperCase();}
-  else n=Number(raw.replace(/[^0-9.-]/g,''));
-  if(!Number.isFinite(n))return null;
-  if(suf==='K')n*=1e3; if(suf==='M')n*=1e6; if(suf==='B')n*=1e9;
-  return n;
-}
-function newsNormalize(e){
-  return {Date:e.Date||e.date, Event:e.Event||e.event||e.Category||'Economic release',
-    Country:newsCountryCode(e.Country||e.country), Importance:+e.Importance||+e.importance||1,
-    Forecast:e.Forecast||e.forecast||e.TEForecast||'', Previous:e.Previous||e.previous||'',
-    Actual:e.Actual||e.actual||''};
-}
-function newsAffectsPair(e,pair){
-  const c=newsCountryCode(e.Country);
-  if(c==='USD')return true; // USD memengaruhi semua pair USD-quoted + crypto + gold
-  const cur=({AUD:'AUDUSD',EUR:'EURUSD',GBP:'GBPUSD',JPY:'USDJPY',CHF:'USDCHF',CAD:'USDCAD',NZD:'NZDUSD'})[c];
-  if(!cur)return false;
-  if(pair==='XAUUSD'||pair==='BTCUSD'||pair==='ETHUSD'||pair==='NAS100'||pair==='US500')return c==='USD';
-  return cur===pair;
-}
-function newsGoldBias(name,surprise,country){
-  const laborSoft=/unemployment rate|unemployment|initial claims|continuing claims|jobless claims|jobless/.test(name);
-  const usdSoftIfHigh=/cpi|inflation|pce|pmi|ism|retail sales|consumer confidence|fed funds|interest rate|rate decision|jolts|durable goods|nonfarm payroll|non-farm payroll|nfp|payroll|gdp|adp|employment/.test(name);
-  if(country==='USD'){ if(laborSoft)return surprise>0; if(usdSoftIfHigh)return surprise<0; return null; }
-  if(laborSoft)return surprise<0; if(usdSoftIfHigh)return surprise>0; return null;
-}
-function newsAnalyze(e){
-  const name=String(e.Event||'').toLowerCase();
-  const country=newsCountryCode(e.Country);
-  const forecast=newsNum(e.Forecast); const actual=newsNum(e.Actual);
-  const impact=+e.Importance||1;
-  if(actual===null||forecast===null) return {dir:'wait',score:Math.max(35,48-impact*2),reason:'Butuh Actual & Forecast.'};
-  const surprise=actual-forecast;
-  const threshold=Math.max(Math.abs(forecast)*0.005,0.01);
-  if(Math.abs(surprise)<threshold) return {dir:'wait',score:45,reason:`Actual ${actual} vs Forecast ${forecast}: tidak ada surprise berarti.`};
-  const goldBullish=newsGoldBias(name,surprise,country);
-  if(goldBullish===null) return {dir:'wait',score:40,reason:`${name} tidak ada mapping dampak ke pasar.`};
-  const strength=Math.min(40,Math.round(Math.abs(surprise)/threshold*10));
-  const score=Math.min(95,Math.max(55,55+strength));
-  return {dir:goldBullish?'long':'short',score,reason:`Actual ${actual} vs Forecast ${forecast}. ${goldBullish?'Data '+country+' melemah untuk USD → bullish.':'Data '+country+' menguat untuk USD → bearish.'}`};
-}
-function mapGoldDirToPair(pair,goldDir){
-  if(pair.startsWith('USD')) return goldDir==='short'?'UP':'DOWN';
-  return goldDir==='long'?'UP':'DOWN';
-}
 function pairMid(pair){
   const q=quotes[pair]; if(!q)return null;
   const m=q.last||((q.bid&&q.ask)?(q.bid+q.ask)/2:0);
@@ -380,52 +332,52 @@ function newsSnapKey(e){ return 'fxSniperNewsSnap:'+String(e.Date)+'|'+String(e.
 function captureNewsSnapshot(e){
   try{
     if(localStorage.getItem(newsSnapKey(e))) return;
-    const t=new Date(e.Date).getTime(); if(!Number.isFinite(t))return;
+    const t=e.ts||new Date(e.Date).getTime(); if(!Number.isFinite(t))return;
     const now=Date.now(); if(now>=t||t-now>3600000)return;
     const prices={}; ALL_KEYS.forEach(k=>{const m=pairMid(k); if(m)prices[k]=m;});
     if(!Object.keys(prices).length)return;
     localStorage.setItem(newsSnapKey(e),JSON.stringify({prices,capturedAt:new Date(now).toISOString()}));
   }catch(err){}
 }
-function newsSnapshot(e){
-  try{ const raw=localStorage.getItem(newsSnapKey(e)); if(raw) return JSON.parse(raw);}catch{}
+function newsPrePrice(e,pair){
+  try{
+    const raw=localStorage.getItem(newsSnapKey(e));
+    if(raw){const snap=JSON.parse(raw);if(snap&&snap.prices&&snap.prices[pair])return snap.prices[pair];}
+  }catch{}
   return null;
-}
-function newsMomentum(e,pair){
-  const snap=newsSnapshot(e); if(!snap||!snap.prices||!snap.prices[pair])return null;
-  const base=snap.prices[pair]; const cur=pairMid(pair);
-  if(!base||!cur)return null;
-  const changePct=(cur-base)/base*100;
-  if(Math.abs(changePct)<0.1) return {dir:null,changePct,base};
-  return {dir:changePct>0?'long':'short',changePct,base};
 }
 function newsBias(pair,now){
-  if(!NEWS_EVENTS.length)return null;
-  const relevant=NEWS_EVENTS.filter(e=>newsAffectsPair(e,pair));
-  const cands=relevant.map(e=>({e,t:new Date(e.Date).getTime()})).filter(x=>Number.isFinite(x.t)&&x.e.Importance>=2).sort((a,b)=>a.t-b.t);
-  // released within 6h
-  const released=cands.filter(x=>x.t<=now&&now-x.t<=6*3600000);
-  if(released.length){
-    const pick=released[released.length-1];
-    const a=newsAnalyze(pick.e);
-    let dir=a.dir;
-    if(dir==='wait'||dir==='live'){
-      const mom=newsMomentum(pick.e,pair);
-      if(mom&&mom.dir)dir=mom.dir;
-    }
-    const until=new Date(pick.t+6*3600000);
-    if(dir==='long'||dir==='short'){
-      return {phase:'post',dir:mapGoldDirToPair(pair,dir),impact:pick.e.Importance,event:pick.e.Event,until,score:a.score};
-    }
-    return {phase:'post',dir:null,impact:pick.e.Importance,event:pick.e.Event,until,score:a.score};
+  if(!NEWS_EVENTS.length||!C.newsBias)return null;
+  return C.newsBias(NEWS_EVENTS,pair,now,newsPrePrice,pairMid(pair));
+}
+function updateSentAnchors(now){
+  ALL_KEYS.forEach(k=>{
+    const m=pairMid(k); if(!(m>0))return;
+    const a=SENT_BASE[k];
+    if(!a||(now-a.t)>3600000)SENT_BASE[k]={t:now,mid:m};
+  });
+}
+function computeLiveMacro(){
+  const usdVotes=[],riskVotes=[];
+  for(const k of ['USDJPY','USDCHF','USDCAD']){
+    const m=pairMid(k),b=SENT_BASE[k]&&SENT_BASE[k].mid;
+    if(m>0&&b>0)usdVotes.push(((m-b)/b)*100);
   }
-  // pre-news within 15 min
-  const upcoming=cands.filter(x=>x.t>now&&x.t-now<=15*60000);
-  if(upcoming.length){
-    const u=upcoming[0];
-    return {phase:'pre',dir:null,impact:u.e.Importance,event:u.e.Event,until:new Date(u.t)};
+  for(const k of ['EURUSD','GBPUSD','AUDUSD','NZDUSD']){
+    const m=pairMid(k),b=SENT_BASE[k]&&SENT_BASE[k].mid;
+    if(m>0&&b>0)usdVotes.push(-((m-b)/b)*100);
   }
-  return null;
+  for(const k of ['NAS100','US500','BTCUSD','ETHUSD']){
+    const m=pairMid(k),b=SENT_BASE[k]&&SENT_BASE[k].mid;
+    if(m>0&&b>0)riskVotes.push(((m-b)/b)*100);
+  }
+  const usdScore=usdVotes.length>=4?Math.max(-1,Math.min(1,(usdVotes.reduce((a,b)=>a+b,0)/usdVotes.length)/0.35)):null;
+  const riskScore=riskVotes.length>=2?Math.max(-1,Math.min(1,(riskVotes.reduce((a,b)=>a+b,0)/riskVotes.length)/0.6)):null;
+  return {usdScore,riskScore};
+}
+function sentimentBias(pair){
+  if(!C.pairSentimentBias)return null;
+  return C.pairSentimentBias(pair,MARKET_SENTIMENT,computeLiveMacro());
 }
 async function refreshNews(){
   NEWS_LAST_FETCH=Date.now();
@@ -434,18 +386,41 @@ async function refreshNews(){
     const r=await fetch(NEWS_CAL_URL+'?v='+Date.now(),{cache:'no-store'});
     if(r.ok){const j=await r.json(); raw=Array.isArray(j)?j:(j.events||[]);}
   }catch(e){console.warn('[news] kalender gagal',e);}
-  if(!raw.length){
-    // Sengaja tidak memakai feed kalender eksternal: aiterminaltrading adalah satu-satunya sumber.
-    // Kalender dibiarkan kosong sampai aiterminaltrading pulih, supaya tidak ada data yang tidak cocok.
-    console.warn('[news] kalender aiterminaltrading kosong/tidak tersedia; sumber eksternal tidak dipakai');
-  }
-  NEWS_EVENTS=raw.map(newsNormalize).filter(e=>e.Date&&!isNaN(new Date(e.Date)));
+  NEWS_EVENTS=(C.newsNormalize?raw.map(C.newsNormalize):raw).filter(Boolean);
+  try{
+    const sr=await fetch(SENTIMENT_URL+'?v='+Date.now(),{cache:'no-store'});
+    if(sr.ok)MARKET_SENTIMENT=await sr.json();
+  }catch{}
+  // Live CORS enrichment: Fear & Greed + Binance 24h
+  try{
+    const [fr,br]=await Promise.allSettled([fetch(FNG_LIVE_URL,{cache:'no-store'}),fetch(BINANCE_24H_URL,{cache:'no-store'})]);
+    const next=Object.assign({},MARKET_SENTIMENT||{});
+    if(fr.status==='fulfilled'&&fr.value.ok){
+      const fj=await fr.value.json();
+      if(fj&&Array.isArray(fj.data)&&fj.data.length){
+        const val=Number(fj.data[0].value),prev=fj.data[1]?Number(fj.data[1].value):val;
+        next.fng={value:val,classification:fj.data[0].value_classification||'Neutral',delta1d:val-prev,score:Number(((val-50)/50).toFixed(3))};
+      }
+    }
+    if(br.status==='fulfilled'&&br.value.ok){
+      const bj=await br.value.json();
+      if(Array.isArray(bj)&&bj.length){
+        const mp={};bj.forEach(x=>{mp[x.symbol]={pct24h:Number(x.priceChangePercent),last:Number(x.lastPrice)};});
+        const cl=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT'].filter(s=>mp[s]);
+        const cAvg=cl.length?cl.reduce((a,s)=>a+mp[s].pct24h,0)/cl.length:0;
+        const eurP=mp.EURUSDT?mp.EURUSDT.pct24h:0;
+        next.market24h=Object.assign({},next.market24h||{},{cryptoAvgPct:cAvg,eurPct:eurP,riskBias:Math.max(-1,Math.min(1,cAvg/4)),usdProxyBias:Math.max(-1,Math.min(1,-eurP))});
+      }
+    }
+    MARKET_SENTIMENT=next;
+  }catch{}
   try{ E.setNewsProvider((pair,now)=>newsBias(pair,now)); }catch(e){}
-  // capture pre-news snapshots for upcoming events
+  try{ if(E.setSentimentProvider) E.setSentimentProvider((pair,now)=>sentimentBias(pair,now)); }catch(e){}
   NEWS_EVENTS.forEach(captureNewsSnapshot);
-  console.log('[news] loaded',NEWS_EVENTS.length,'events');
+  console.log('[context] calendar=',NEWS_EVENTS.length,'fng=',MARKET_SENTIMENT&&MARKET_SENTIMENT.fng?MARKET_SENTIMENT.fng.value:'n/a');
 }
 function newsTick(){
+  updateSentAnchors(Date.now());
   NEWS_EVENTS.forEach(captureNewsSnapshot);
 }
 if(typeof setInterval!=='undefined'){ setInterval(newsTick,30000); setInterval(()=>{ if(Date.now()-NEWS_LAST_FETCH>NEWS_REFRESH_MS) refreshNews(); },60000); }
