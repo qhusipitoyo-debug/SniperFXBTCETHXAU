@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-12T14:36:26.355Z",
+  "updatedAt": "2026-11-12T14:36:28.184Z",
   "fng": {
     "value": 28,
     "classification": "Fear",
@@ -8,25 +8,25 @@
     "score": -0.44
   },
   "market24h": {
-    "cryptoAvgPct": -2.414,
+    "cryptoAvgPct": -2.409,
     "eurPct": -0.036,
     "goldPct": -2.929,
-    "riskBias": -0.604,
+    "riskBias": -0.602,
     "usdProxyBias": 0.036,
     "symbols": {
       "BTCUSDT": {
-        "pct24h": -1.618,
-        "last": 72246.02,
+        "pct24h": -1.604,
+        "last": 72244.19,
         "quoteVolM": 1111.9
       },
       "ETHUSDT": {
-        "pct24h": -1.543,
-        "last": 2015.63,
-        "quoteVolM": 499.1
+        "pct24h": -1.527,
+        "last": 2015.67,
+        "quoteVolM": 499.3
       },
       "BNBUSDT": {
-        "pct24h": -3.554,
-        "last": 655.84,
+        "pct24h": -3.552,
+        "last": 655.81,
         "quoteVolM": 79.7
       },
       "EURUSDT": {
@@ -35,7 +35,7 @@
         "quoteVolM": 12.3
       },
       "SOLUSDT": {
-        "pct24h": -2.94,
+        "pct24h": -2.952,
         "last": 81.54,
         "quoteVolM": 162.3
       },
@@ -47,5 +47,5 @@
     }
   },
   "regime": "RISK_OFF",
-  "riskScore": -0.53
+  "riskScore": -0.529
 }
