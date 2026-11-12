@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-12T13:12:43.318Z",
+  "updatedAt": "2026-11-12T13:12:45.126Z",
   "fng": {
     "value": 28,
     "classification": "Fear",
@@ -8,26 +8,26 @@
     "score": -0.44
   },
   "market24h": {
-    "cryptoAvgPct": -2.58,
+    "cryptoAvgPct": -2.541,
     "eurPct": -0.467,
     "goldPct": -2.657,
-    "riskBias": -0.645,
+    "riskBias": -0.635,
     "usdProxyBias": 0.467,
     "symbols": {
       "BTCUSDT": {
-        "pct24h": -1.648,
-        "last": 72625.39,
-        "quoteVolM": 1004
+        "pct24h": -1.629,
+        "last": 72639.42,
+        "quoteVolM": 1004.2
       },
       "ETHUSDT": {
-        "pct24h": -2.222,
-        "last": 2005.57,
-        "quoteVolM": 415.5
+        "pct24h": -2.16,
+        "last": 2006.84,
+        "quoteVolM": 415.6
       },
       "BNBUSDT": {
-        "pct24h": -3.684,
-        "last": 655.74,
-        "quoteVolM": 70.6
+        "pct24h": -3.644,
+        "last": 656.01,
+        "quoteVolM": 70.7
       },
       "EURUSDT": {
         "pct24h": -0.467,
@@ -35,8 +35,8 @@
         "quoteVolM": 12.5
       },
       "SOLUSDT": {
-        "pct24h": -2.764,
-        "last": 81.61,
+        "pct24h": -2.729,
+        "last": 81.63,
         "quoteVolM": 153.4
       },
       "PAXGUSDT": {
@@ -47,5 +47,5 @@
     }
   },
   "regime": "RISK_OFF",
-  "riskScore": -0.553
+  "riskScore": -0.547
 }
