@@ -86,11 +86,11 @@ const PAIRS={
     calib:{params:{BAR_MIN:15,SWING_BARS:6,SL_ATR_MULT:2.2,SL_STRUCT_BUF:0.5,TP1_R:1.5,TP2_R:3.0,PLAN_TTL:240*60000}},
     binance:null,deriv:'frxXAUUSD'},
   BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:1.0, sess:[0,24],
-    hours:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
+    hours:[11,12,13,14,15,16,17,18,21,22],
     calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:2.8,SL_STRUCT_BUF:0.6,TP1_R:1.8,TP2_R:3.5,PLAN_TTL:300*60000}},
     binance:'btcusdt', deriv:'cryBTCUSD'},
   ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.0, sess:[0,24],
-    hours:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
+    hours:[11,12,13,14,15,16,17,18,21,22],
     calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:3.0,SL_STRUCT_BUF:0.6,TP1_R:2.0,TP2_R:4.0,PLAN_TTL:300*60000}},
     binance:'ethusdt', deriv:'cryETHUSD'}
 };
@@ -158,9 +158,8 @@ const isClosed=(pairKey,t)=>{const P=PAIRS[pairKey];return P&&P.h24?false:closed
    — lihat outsidePrior(); ia label, bukan gerbang. */
 function inSession(pairKey,t,prm){
   const P=PAIRS[pairKey];if(!P)return false;
-  if(P.h24)return true;
-  if(closedFX(t))return false;
-  if(prm&&prm.STRICT_SESSION&&Array.isArray(P.hours)&&P.hours.length){
+  if(!P.h24&&closedFX(t))return false;
+  if(prm&&prm.STRICT_SESSION&&Array.isArray(P.hours)&&P.hours.length&&P.hours.length<24){
     return P.hours.includes(new Date(t).getUTCHours());
   }
   return true;
@@ -173,7 +172,7 @@ function outsidePrior(pairKey,t){
 }
 function sessionLabel(pairKey){
   const P=PAIRS[pairKey];if(!P)return '';
-  if(P.h24)return '24/7 (Crypto)';
+  if(P.kind==='crypto')return 'London/NY Likuid 11–22 UTC';
   if(pairKey==='NAS100'||pairKey==='US500')return 'US Cash 13–21 UTC';
   if(pairKey==='XAUUSD')return 'London/NY 07–18 UTC';
   if(pairKey==='USDCAD')return 'London/NY 12–20 UTC';

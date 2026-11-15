@@ -515,7 +515,18 @@ function lotFor(plan){
 
 function planCardHtml(pair,x,s,now){
   const q=quotes[pair]||{},c=PAIRS[pair],dp=c.dp;
-  const stored=plans[pair]&&plans[pair].pair===pair?plans[pair]:null;
+  let stored=plans[pair]&&plans[pair].pair===pair?plans[pair]:null;
+  // Bersihkan zombie / plan usang: bila expired, drift jauh (>4%), atau selesai lebih dari 10 menit lalu
+  if(stored){
+    const isZombie=!stored.done&&(now>=stored.expires||(stored.t&&now-stored.t>stored.expires)||(q.last>0&&stored.entry>0&&Math.abs(q.last-stored.entry)/stored.entry>0.04));
+    const isOldDone=stored.done&&(now-(stored.closedAt||stored.t||0)>10*60000);
+    if(isZombie||isOldDone){
+      if(isZombie&&engines[pair])engines[pair].abandon(stored.id);
+      delete plans[pair];
+      saveAll();
+      stored=null;
+    }
+  }
   const locked=!!(stored&&!stored.done),fin=!!(stored&&stored.done);
   /* Blok angka muncul di TIGA keadaan kartu: plan terkunci, plan selesai, dan countdown / threshold (preview). */
   const preview=(!locked&&!fin&&engines[pair]&&s.side&&s.side!=='WAIT')?engines[pair].preview(s.side):null;
@@ -1078,7 +1089,16 @@ async function loadCalibration(){
     if(!z){const old=JSON.parse(localStorage.getItem('fxSniper')||'{}');z={settings:old.settings}}
     storedEntries=Array.isArray(z.sniperEntries)?z.sniperEntries:[];
     settings=Object.assign(settings,z.settings||{});
-    if(z.plans&&typeof z.plans==='object')Object.assign(plans,z.plans);
+    if(z.plans&&typeof z.plans==='object'){
+      const now=Date.now();
+      for(const k of Object.keys(z.plans)){
+        const p=z.plans[k];
+        if(!p||p.done||now>=p.expires||(p.t&&now-p.t>p.expires)||(now-(p.t||0)>6*3600000)){
+          delete z.plans[k];
+        }
+      }
+      Object.assign(plans,z.plans);
+    }
     historyEntries.splice(0,historyEntries.length,...storedEntries.filter(x=>x.stage==='ENTRY').slice(-60).reverse());
   }catch(e){console.warn('load',e)}
 }
