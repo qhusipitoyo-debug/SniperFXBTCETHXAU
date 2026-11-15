@@ -76,10 +76,16 @@ jobs:
             # SIGTERM ditangani collector sebagai "flush lalu keluar 0". --preserve-status
             # wajib: tanpa itu `timeout` selalu mengembalikan 124 untuk segmen yang berakhir
             # sesuai rencana, dan setiap segmen akan terbaca seperti kegagalan.
+            t_start=$(date +%s)
             timeout -s TERM --preserve-status "$((SEG * 60))" node tools/collector.js --feed="$FEED" --modes="$MODES" ||
               echo "collector segmen $n berhenti dengan code $? — publish tetap dijalankan"
+            t_dur=$(( $(date +%s) - t_start ))
             echo "::endgroup::"
             PUBLISH_SEGMENT=$n bash tools/publish.sh || echo "publish segmen $n gagal — coba lagi di segmen berikutnya"
+            if [ "$t_dur" -lt 30 ]; then
+              echo "Peringatan: segmen selesai terlalu cepat ($t_dur s) — jeda 60s untuk mencegah loop..."
+              sleep 60
+            fi
           done
 
       - name: ringkasan

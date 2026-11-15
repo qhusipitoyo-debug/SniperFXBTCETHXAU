@@ -135,6 +135,27 @@ if(!REPLAY){
   }
 }
 
+/* ---------- ledger: append-only, dedup lewat id plan ----------
+   id plan dari engine = pair|t|side, jadi restart di tengah hari tidak menghasilkan
+   baris kembar walaupun engine melihat kembali plan yang sama. */
+const seen=new Set();
+function loadLedger(){
+  if(!fs.existsSync(LEDGER))return 0;
+  let added=0;
+  for(const line of fs.readFileSync(LEDGER,'utf8').split('\n')){
+    if(!line.trim())continue;
+    try{const r=JSON.parse(line);if(r&&r.id&&!seen.has(r.id)){seen.add(r.id);added++}}catch{}
+  }
+  return added;
+}
+loadLedger();
+
+function appendLedger(rows){
+  if(!rows.length)return;
+  fs.mkdirSync(path.dirname(LEDGER),{recursive:true});
+  fs.appendFileSync(LEDGER,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+}
+
 /* Satu engine per (pair × mode). Engine tidak tahu-menahu soal UI: ia terima tick,
    kembalikan kejadian, dan menyimpan plan yang selesai di .closed. */
 const engines=new Map();
@@ -154,25 +175,6 @@ for(const pair of KEYS)for(const mode of MODES){
 }
 
 const stat={startedAt:Date.now(),ticks:0,quotes:0,seeded:0,lastTickAt:0,wsMsg:0,reconnects:0,writes:0,errors:0};
-
-/* ---------- ledger: append-only, dedup lewat id plan ----------
-   id plan dari engine = pair|t|side, jadi restart di tengah hari tidak menghasilkan
-   baris kembar walaupun engine melihat kembali plan yang sama. */
-const seen=new Set();
-function loadLedger(){
-  if(!fs.existsSync(LEDGER))return 0;
-  let added=0;
-  for(const line of fs.readFileSync(LEDGER,'utf8').split('\n')){
-    if(!line.trim())continue;
-    try{const r=JSON.parse(line);if(r&&r.id&&!seen.has(r.id)){seen.add(r.id);added++}}catch{}
-  }
-  return added;
-}
-function appendLedger(rows){
-  if(!rows.length)return;
-  fs.mkdirSync(path.dirname(LEDGER),{recursive:true});
-  fs.appendFileSync(LEDGER,rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
-}
 
 /* ---------- ringkasan → stats/live_stats.json ----------
    Bentuknya disengaja sama seperti keluaran tools/pair_stats.js (termasuk hours {n,w,g,l})

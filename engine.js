@@ -83,30 +83,31 @@ const PAIRS={
     hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_SPC'},
   XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:6.0,typSpread:2.5,sess:[0,24],
     hours:[7,8,9,10,11,12,13,14,15,16,17],
+    calib:{params:{BAR_MIN:15,SWING_BARS:6,SL_ATR_MULT:2.2,SL_STRUCT_BUF:0.5,TP1_R:1.5,TP2_R:3.0,PLAN_TTL:240*60000}},
     binance:null,deriv:'frxXAUUSD'},
   BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:1.0, sess:[0,24],
     hours:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
-    calib:{params:{BAR_MIN:30,SWING_BARS:4,TP1_R:1.3,TP2_R:2.6,PLAN_TTL:240*60000}},
+    calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:2.8,SL_STRUCT_BUF:0.6,TP1_R:1.8,TP2_R:3.5,PLAN_TTL:300*60000}},
     binance:'btcusdt', deriv:'cryBTCUSD'},
   ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.0, sess:[0,24],
     hours:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23],
-    calib:{params:{BAR_MIN:30,SWING_BARS:4,TP1_R:1.3,TP2_R:2.6,PLAN_TTL:240*60000}},
+    calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:3.0,SL_STRUCT_BUF:0.6,TP1_R:2.0,TP2_R:4.0,PLAN_TTL:300*60000}},
     binance:'ethusdt', deriv:'cryETHUSD'}
 };
 
 const PARAMS={
   ATR_N:14, MIN_BARS:12,
-  BAR_MIN:15,                           // bar sinyal 15 menit untuk FX/Gold/Indeks (Crypto override 30m)
+  BAR_MIN:30,                           // bar sinyal 30 menit (mengangkat rasio ATR/spread & memfilter noise)
   BAR_CAP:1200,                         // simpan 20 jam bar 1 menit agar ATR60 & HTF terisi penuh
-  SL_ATR_MULT:1.8, MIN_SL_PIPS:4, COST_SL_MULT:4,   // SL terkalibrasi walk-forward
-  SWING_BARS:6, SL_STRUCT_BUF:.4, SL_MAX_ATR:4.5,   // swing struktural 6 bar sinyal + batas validasi
-  TP1_R:1.4, TP2_R:2.8, TP1_FRAC:.5,
+  SL_ATR_MULT:2.2, MIN_SL_PIPS:4, COST_SL_MULT:4,   // SL terkalibrasi walk-forward
+  SWING_BARS:6, SL_STRUCT_BUF:.5, SL_MAX_ATR:5.0,   // swing struktural 6 bar sinyal + batas validasi
+  TP1_R:1.5, TP2_R:3.0, TP1_FRAC:.5,
   COST_EXTRA_PIPS:0,
   BE_AT_R:0,                            // BE hanya setelah TP1 tersentuh (cegah premature stop-out 0R)
-  PLAN_TTL:210*60000,                   // Plan aktif 3.5 jam (sesuai bar 15 menit)
+  PLAN_TTL:240*60000,                   // Plan aktif 4 jam
   STRICT_SESSION:true,                  // FX/Gold/Indeks mengikuti jam sesi likuid (P.hours)
-  MAX_Z60:3.0, MAX_Z180:3.5,
-  BRK_CEIL:1.0,                         // Izinkan breakout & trend continuation
+  MAX_Z60:2.2, MAX_Z180:2.8,            // Anti-chasing: tolak entry jika harga sudah loncat ekstrem
+  BRK_CEIL:0.95,                        // Izinkan breakout & trend continuation dengan batas wajar
   MAX_RETRACE_ATR:1.5,
   LOSS_STREAK_N:3, LOSS_STREAK_PAUSE:45*60000,
   NEWS_BLACKOUT:[],                     // Blackout dinamis berdasarkan kalender nyata
@@ -366,7 +367,11 @@ function create(pairKey,opts){
       finish(be?'BE':'SL',beRg);return ev;
     }
     if(prm.BE_AT_R>0&&!tr.tp1hit&&!tr.beArmed&&rOf(px)>=prm.BE_AT_R){tr.beArmed=true;tr.sl=tr.entry;tr.beAtR=rOf(px);ev.push({type:'BE',trade:tr})}
-    if(!tr.tp1hit&&(buy?px>=tr.tp1:px<=tr.tp1)){tr.tp1hit=true;tr.tp1At=t;tr.sl=tr.entry;ev.push({type:'TP1',trade:tr})}
+    if(!tr.tp1hit&&(buy?px>=tr.tp1:px<=tr.tp1)){
+      tr.tp1hit=true;tr.tp1At=t;
+      tr.sl=buy?rd(tr.entry+0.05*tr.slDist):rd(tr.entry-0.05*tr.slDist);
+      ev.push({type:'TP1',trade:tr});
+    }
     if(tr.tp1hit&&(buy?px>=tr.tp2:px<=tr.tp2)){finish('TP2',F*prm.TP1_R+(1-F)*rOf(px));return ev}
     if(t>tr.expires){const r=rOf(px);finish('TIME',tr.tp1hit?F*prm.TP1_R+(1-F)*r:r)}
     return ev;
