@@ -270,7 +270,7 @@ function startDerivMulti(keys){
     const now=t.epoch?N(t.epoch)*1000:Date.now();
     if(!(bid>0&&ask>0)){
       if(!(q>0))return;
-      const half=PAIRS[pair].pip*.4;bid=q-half;ask=q+half;
+      const half=(PAIRS[pair].typSpread*PAIRS[pair].pip)/2;bid=q-half;ask=q+half;
     }
     feedNote='';ingestPair(pair,bid,ask,now);
   },'deriv-multi');

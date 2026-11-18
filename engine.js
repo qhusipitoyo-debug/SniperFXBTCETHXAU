@@ -71,27 +71,27 @@ const PAIRS={
     hours:[7,8,9,10,11,12,13,14,15,16], binance:null,deriv:'frxUSDCHF'},
   AUDUSD:{name:'AUD/USD',nick:'Aussie', pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,10,11,12,13,14,15,16], binance:null,deriv:'frxAUDUSD'},
-  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.2,sess:[0,24],
+  USDCAD:{name:'USD/CAD',nick:'Loonie', pip:.0001,dp:5,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[0,24],
     hours:[12,13,14,15,16,17,18,19], binance:null,deriv:'frxUSDCAD'},
   NZDUSD:{name:'NZ/USD',nick:'Kiwi',   pip:.0001,dp:5,quoteUSD:true, maxSpread:5.0, typSpread:1.2,sess:[0,24],
     hours:[0,1,2,3,7,8,9,10,11,12,13,14,15,16], binance:null,deriv:'frxNZDUSD'},
   GBPJPY:{name:'GBP/JPY',nick:'Sterling Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:5.0, typSpread:1.5,sess:[0,24],
     hours:[0,1,2,3,7,8,9,10,11,12,13,14,15,16], binance:null,deriv:'frxGBPJPY'},
-  EURJPY:{name:'EUR/JPY',nick:'Euro Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.3,sess:[0,24],
+  EURJPY:{name:'EUR/JPY',nick:'Euro Yen',pip:.01,dp:3,quoteUSD:false,maxSpread:4.5, typSpread:1.5,sess:[0,24],
     hours:[0,1,2,3,7,8,9,10,11,12,13,14,15,16], binance:null,deriv:'frxEURJPY'},
   NAS100:{name:'Nasdaq 100',nick:'NASDAQ',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:250,typSpread:3.0,sess:[0,24],
     hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_NDX'},
   US500:{name:'S&P 500',nick:'SP500',kind:'index',pip:1,dp:2,quoteUSD:true,units:1,maxSpread:80,typSpread:1.0,sess:[0,24],
     hours:[13,14,15,16,17,18,19,20], binance:null,deriv:'OTC_SPC'},
-  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:6.0,typSpread:2.5,sess:[0,24],
+  XAUUSD:{name:'XAU/USD',nick:'Gold',   kind:'metal', pip:.1,   dp:2,quoteUSD:true, units:100,maxSpread:6.0,typSpread:3.0,sess:[0,24],
     hours:[7,8,9,10,11,12,13,14,15,16,17],
     calib:{params:{BAR_MIN:15,SWING_BARS:6,SL_ATR_MULT:2.2,SL_STRUCT_BUF:0.5,TP1_R:1.5,TP2_R:3.0,PLAN_TTL:240*60000}},
     binance:null,deriv:'frxXAUUSD'},
-  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:1.0, sess:[0,24],
+  BTCUSD:{name:'BTC/USD',nick:'Bitcoin',kind:'crypto',h24:true,pip:1,   dp:2,quoteUSD:true, units:1,  maxSpread:60, typSpread:20, sess:[0,24],
     hours:[11,12,13,14,15,16,17,18,21,22],
     calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:2.8,SL_STRUCT_BUF:0.6,TP1_R:1.8,TP2_R:3.5,PLAN_TTL:300*60000}},
     binance:'btcusdt', deriv:'cryBTCUSD'},
-  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:1.0, sess:[0,24],
+  ETHUSD:{name:'ETH/USD',nick:'Ether',  kind:'crypto',h24:true,pip:.1,  dp:2,quoteUSD:true, units:1,  maxSpread:50, typSpread:20, sess:[0,24],
     hours:[11,12,13,14,15,16,17,18,21,22],
     calib:{params:{BAR_MIN:30,SWING_BARS:6,SL_ATR_MULT:3.0,SL_STRUCT_BUF:0.6,TP1_R:2.0,TP2_R:4.0,PLAN_TTL:300*60000}},
     binance:'ethusdt', deriv:'cryETHUSD'}
@@ -304,7 +304,9 @@ function create(pairKey,opts){
   }
   const costPips=()=>{
     const liveSpread=(ask-bid)/P.pip;
-    return Math.max(liveSpread>0?liveSpread:P.typSpread, 0.4*P.typSpread)+(prm.COST_EXTRA_PIPS||0);
+    // Biaya konservatif: jangan pernah di bawah typSpread broker (asumsi retail).
+    // Formula kanonik (docs/ANALISIS.md): max(spread live, typSpread) + COST_EXTRA_PIPS.
+    return Math.max(liveSpread>0?liveSpread:0, P.typSpread)+(prm.COST_EXTRA_PIPS||0);
   };
 
   /* Skor breakout/pullback SUDAH bersumbu arah (dipanggil dengan brk=d*loc, tanpa dikali d lagi).
