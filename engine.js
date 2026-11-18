@@ -237,7 +237,9 @@ function create(pairKey,opts){
 
   /* ---------- data in ---------- */
   function onTick(t,b,a){
-    if(!(b>0&&a>0&&a>=b))return[];
+    if(!(Number.isFinite(t)&&Number.isFinite(b)&&Number.isFinite(a)&&b>0&&a>0&&a>=b))return[];
+    // Tolak tick yang mundur waktunya: mencegah bar/ATR tercemar data basi atau out-of-order.
+    if(ts>0&&t<ts)return[];
     bid=b;ask=a;ts=t;
     const mid=(a+b)/2,sec=Math.floor(t/1000),k=Math.floor(t/60000);
     const L=s1[s1.length-1];

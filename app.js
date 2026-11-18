@@ -113,7 +113,9 @@ function clearFeedHelpers(){
 
 /* ---------- quote + engine ingest per pair ---------- */
 function ingestPair(pair,bid,ask,now){
-  if(!(bid>0&&ask>0&&ask>=bid)||!PAIRS[pair])return;
+  if(!(Number.isFinite(bid)&&Number.isFinite(ask)&&bid>0&&ask>0&&ask>=bid)||!PAIRS[pair])return;
+  const q=quotes[pair];
+  if(q&&q.ts&&now<q.ts)return;   // abaikan tick yang lebih tua dari quote terakhir (out-of-order / basi)
   const mid=(bid+ask)/2;
   quotes[pair]={bid,ask,last:mid,ts:now};
   const pts=chartPtsBy[pair]||(chartPtsBy[pair]=[]);
