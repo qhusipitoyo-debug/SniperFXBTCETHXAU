@@ -107,20 +107,20 @@ const PARAMS={
   PLAN_TTL:240*60000,                   // Plan aktif 4 jam
   STRICT_SESSION:true,                  // FX/Gold/Indeks mengikuti jam sesi likuid (P.hours)
   MAX_Z60:2.2, MAX_Z180:2.8,            // Anti-chasing: tolak entry jika harga sudah loncat ekstrem
-  BRK_CEIL:0.95,                        // Izinkan breakout & trend continuation dengan batas wajar
+  BRK_CEIL:0.85,                        // Batasi breakout agar tidak entry di pucuk ekstrem range
   MAX_RETRACE_ATR:1.5,
   LOSS_STREAK_N:3, LOSS_STREAK_PAUSE:45*60000,
   NEWS_BLACKOUT:[],                     // Blackout dinamis berdasarkan kalender nyata
   SPIKE_MAX:3.0,
   MAX_DAILY_LOSS_R:3,
-  MIN_MOM:.10, MIN_TREND:.10,
-  HTF_SOFT:-.12,
+  MIN_MOM:.14, MIN_TREND:.14,
+  HTF_SOFT:.02,
   BRK_FLOOR:-.65,
   SESS_EDGE_MS:3*60000,
-  CONFIRM_GRACE:8000,                   // Toleransi konfirmasi 8 detik
-  BLEED_DECAY:.6,
+  CONFIRM_GRACE:4000,                   // Toleransi konfirmasi diperketat ke 4 detik (bukan 8 detik)
+  BLEED_DECAY:1.2,                      // Peluruhan progres dipercepat saat gerbang goyah
   DT_CAP:6000,
-  SOFT_HOLD:.85,
+  SOFT_HOLD:.95,                        // Toleransi latch diperketat (hanya diskon 5%, bukan 15%)
   NEAR_ENTER:.85,NEAR_EXIT:.65,
   W:{mom:.25,trend:.45,brk:.15,flow:.10}
 };
